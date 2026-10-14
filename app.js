@@ -13,6 +13,24 @@ let datos; // aquí viven los ejercicios mientras usas la app
 function cargar() {
   try { datos = JSON.parse(localStorage.getItem("japones")); } catch (e) { datos = null; }
   if (!datos) datos = structuredClone(EJEMPLOS); // si no hay nada guardado, usa los ejemplos
+  asignarTemas();
+}
+// Adivina el tema de una tarjeta buscando su palabra en los ejercicios de unir.
+// Si hay varias coincidencias (como かえる), elige la que tenga la misma traducción.
+function temaDe(t) {
+  const base = t.anverso.replace(/\s*\(.*\)\s*$/, ""); // quita "(animal)" y similares
+  const candidatos = [];
+  datos.unir.forEach((u) => u.pares.forEach((p) => {
+    if (p[0] === base) candidatos.push({ tema: u.titulo, es: p[1] });
+  }));
+  const mejor = candidatos.find((c) => t.reverso.includes(c.es)) || candidatos[0];
+  return mejor ? mejor.tema : "Sin tema";
+}
+// Para tarjetas guardadas antes de que existieran los temas
+function asignarTemas() {
+  let cambios = false;
+  datos.tarjetas.forEach((t) => { if (!t.tema) { t.tema = temaDe(t); cambios = true; } });
+  if (cambios) guardar();
 }
 function guardar() {
   try { localStorage.setItem("japones", JSON.stringify(datos)); } catch (e) { /* sin almacenamiento */ }
@@ -120,17 +138,36 @@ function verTest() {
 }
 
 // ================= 4. TIPO 2: TARJETAS DE ESTUDIO =================
-function verTarjetas() {
+// Cada tarjeta tiene un "tema": los mismos nombres que los ejercicios de unir.
+// Devuelve los temas que tienen tarjetas, en el orden de los ejercicios de unir.
+function temasTarjetas() {
+  const usados = new Set(datos.tarjetas.map((t) => t.tema || "Sin tema"));
+  const temas = datos.unir.map((u) => u.titulo).filter((t) => usados.has(t));
+  usados.forEach((t) => { if (!temas.includes(t)) temas.push(t); }); // temas propios
+  return temas;
+}
+
+function verTarjetas(tema = "todo") { // "todo" = repasar todas las tarjetas
   if (!datos.tarjetas.length) return vacio();
-  const lista = mezclar(datos.tarjetas);
+  const temas = temasTarjetas();
+  if (tema !== "todo" && !temas.includes(tema)) tema = "todo";
+  const delTema = (t) => (t.tema || "Sin tema");
+  const lista = mezclar(datos.tarjetas.filter((t) => tema === "todo" || delTema(t) === tema));
   let i = 0, girada = false;
 
   function mostrar() {
     const t = lista[i];
+    const opciones = temas.map((nombre) => {
+      const cuantas = datos.tarjetas.filter((x) => delTema(x) === nombre).length;
+      return `<option value="${esc(nombre)}" ${nombre === tema ? "selected" : ""}>${esc(nombre)} (${cuantas})</option>`;
+    }).join("");
     app.innerHTML = `
-      <p class="prog">Tarjeta ${i + 1} de ${lista.length}</p>
-      <button class="tarjeta ${girada ? "reverso" : ""}">${esc(girada ? t.reverso : t.anverso)}</button>
+      <select id="tema" aria-label="Tema de las tarjetas">
+        <option value="todo" ${tema === "todo" ? "selected" : ""}>Todo (${datos.tarjetas.length})</option>${opciones}</select>
+      <p class="prog">Tarjeta ${i + 1} de ${lista.length} · toca la tarjeta para girarla</p>
+      <button class="tarjeta ${girada ? "reverso" : ""}" data-lado="${girada ? "Reverso" : "Anverso"}">${esc(girada ? t.reverso : t.anverso)}</button>
       <div class="fila"><button id="ant">← Anterior</button><button id="sig">Siguiente →</button></div>`;
+    $("#tema").onchange = (e) => verTarjetas(e.target.value); // cambia de tema y vuelve a barajar
     $(".tarjeta").onclick = () => { girada = !girada; mostrar(); }; // clic = girar
     // El operador % hace que al llegar al final vuelva al principio
     $("#ant").onclick = () => { i = (i - 1 + lista.length) % lista.length; girada = false; mostrar(); };
@@ -347,6 +384,9 @@ function verCrear() {
       <form id="f-tarjeta">
         <label>Anverso (lo que ves primero)<input name="anverso" required></label>
         <label>Reverso (la respuesta)<input name="reverso" required></label>
+        <label>Tema (opcional; si lo dejas vacío, se intenta adivinar)
+          <input name="tema" list="lista-temas"></label>
+        <datalist id="lista-temas">${datos.unir.map((u) => `<option value="${esc(u.titulo)}">`).join("")}</datalist>
         <button>Añadir</button><span class="msg"></span>
       </form></details>
 
@@ -391,7 +431,9 @@ function verCrear() {
     return null;
   });
   conectar("#f-tarjeta", (c) => {
-    datos.tarjetas.push({ anverso: c.anverso.value.trim(), reverso: c.reverso.value.trim() });
+    const nueva = { anverso: c.anverso.value.trim(), reverso: c.reverso.value.trim() };
+    nueva.tema = c.tema.value.trim() || temaDe(nueva);
+    datos.tarjetas.push(nueva);
     return null;
   });
   conectar("#f-unir", (c) => {
