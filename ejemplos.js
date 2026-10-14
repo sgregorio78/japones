@@ -6,7 +6,7 @@
 //                pronombres, partículas, expresiones) y por categoría. Cada grupo tiene 3-5 pares.
 //   huecos    -> frases de los apuntes donde hay que elegir partículas, demostrativos o formas verbales.
 // Cada ejercicio ocupa una línea. Para añadir uno, copia una línea y cámbiala.
-// Después, en la sección «Crear», pulsa «Restaurar ejemplos» para cargarlos.
+// Guarda el archivo y recarga la página (F5) para ver los cambios.
 const EJEMPLOS = {
   // { pregunta, correcta, incorrectas: [...] }
   test: [

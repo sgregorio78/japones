@@ -1,20 +1,13 @@
-/* JavaScript = la LÓGICA. Este archivo tiene 6 partes:
-   1. Datos   2. Utilidades   3-6. Los 4 tipos de ejercicio   7. Sección Crear   8. Arranque */
+/* JavaScript = la LÓGICA. Este archivo tiene 7 partes:
+   1. Datos   2. Utilidades   3-6. Los 4 tipos de ejercicio   7. Arranque */
 "use strict"; // modo estricto: avisa de errores tontos
 
 // ================= 1. DATOS =================
-// Los ejercicios de ejemplo (EJEMPLOS) están en el archivo ejemplos.js,
-// que se carga antes que este archivo (ver index.html).
+// Todos los ejercicios están en el archivo ejemplos.js (la lista EJEMPLOS), que se carga
+// antes que este archivo (ver index.html). Para añadir, cambiar o borrar ejercicios,
+// edita ejemplos.js y recarga la página: aquí no se guarda nada en el navegador.
+const datos = EJEMPLOS;
 
-let datos; // aquí viven los ejercicios mientras usas la app
-
-// localStorage guarda texto en tu navegador (no se pierde al cerrar la página).
-// JSON.stringify convierte los datos a texto; JSON.parse hace lo contrario.
-function cargar() {
-  try { datos = JSON.parse(localStorage.getItem("japones")); } catch (e) { datos = null; }
-  if (!datos) datos = structuredClone(EJEMPLOS); // si no hay nada guardado, usa los ejemplos
-  asignarTemas();
-}
 // Adivina el tema de una tarjeta buscando su palabra en los ejercicios de unir.
 // Si hay varias coincidencias (como かえる), elige la que tenga la misma traducción.
 function temaDe(t) {
@@ -26,15 +19,8 @@ function temaDe(t) {
   const mejor = candidatos.find((c) => t.reverso.includes(c.es)) || candidatos[0];
   return mejor ? mejor.tema : "Sin tema";
 }
-// Para tarjetas guardadas antes de que existieran los temas
-function asignarTemas() {
-  let cambios = false;
-  datos.tarjetas.forEach((t) => { if (!t.tema) { t.tema = temaDe(t); cambios = true; } });
-  if (cambios) guardar();
-}
-function guardar() {
-  try { localStorage.setItem("japones", JSON.stringify(datos)); } catch (e) { /* sin almacenamiento */ }
-}
+// Si una tarjeta no tiene "tema" en ejemplos.js, se le asigna uno automáticamente
+datos.tarjetas.forEach((t) => { if (!t.tema) t.tema = temaDe(t); });
 
 // ================= 2. UTILIDADES =================
 const app = document.querySelector("#app");
@@ -54,7 +40,7 @@ function mezclar(lista) {
   return a;
 }
 function vacio() {
-  app.innerHTML = `<p class="aviso">Aún no hay ejercicios de este tipo. Añade alguno en la sección «Crear».</p>`;
+  app.innerHTML = `<p class="aviso">Aún no hay ejercicios de este tipo. Añade alguno en el archivo ejemplos.js.</p>`;
 }
 // ----- Sesión de práctica (para los ejercicios de unir y de huecos) -----
 // Al entrar en una sección se crea una "sesión": un orden aleatorio de los ejercicios y
@@ -165,7 +151,7 @@ function verTarjetas(tema = "todo") { // "todo" = repasar todas las tarjetas
       <select id="tema" aria-label="Tema de las tarjetas">
         <option value="todo" ${tema === "todo" ? "selected" : ""}>Todo (${datos.tarjetas.length})</option>${opciones}</select>
       <p class="prog">Tarjeta ${i + 1} de ${lista.length} · toca la tarjeta para girarla</p>
-      <button class="tarjeta ${girada ? "reverso" : ""}" data-lado="${girada ? "Reverso" : "Anverso"}">${esc(girada ? t.reverso : t.anverso)}</button>
+      <button class="tarjeta ${girada ? "reverso" : ""}">${esc(girada ? t.reverso : t.anverso)}</button>
       <div class="fila"><button id="ant">← Anterior</button><button id="sig">Siguiente →</button></div>`;
     $("#tema").onchange = (e) => verTarjetas(e.target.value); // cambia de tema y vuelve a barajar
     $(".tarjeta").onclick = () => { girada = !girada; mostrar(); }; // clic = girar
@@ -363,104 +349,9 @@ function verHuecos(pos = 0) {
   $("#reint").onclick = () => verHuecos(pos);
 }
 
-// ================= 7. SECCIÓN CREAR =================
-// Convierte un texto de varias líneas en una lista de líneas no vacías
-const lineas = (t) => t.split("\n").map((s) => s.trim()).filter(Boolean);
-
-function verCrear() {
-  app.innerHTML = `
-    <h2>Crear ejercicios</h2>
-    <p class="aviso">Test: ${datos.test.length} · Tarjetas: ${datos.tarjetas.length} · Unir: ${datos.unir.length} · Huecos: ${datos.huecos.length}</p>
-
-    <details open><summary>Pregunta de test</summary>
-      <form id="f-test">
-        <label>Pregunta<input name="pregunta" required></label>
-        <label>Respuesta correcta<input name="correcta" required></label>
-        <label>Respuestas incorrectas (una por línea)<textarea name="incorrectas" rows="3" required></textarea></label>
-        <button>Añadir</button><span class="msg"></span>
-      </form></details>
-
-    <details><summary>Tarjeta de estudio</summary>
-      <form id="f-tarjeta">
-        <label>Anverso (lo que ves primero)<input name="anverso" required></label>
-        <label>Reverso (la respuesta)<input name="reverso" required></label>
-        <label>Tema (opcional; si lo dejas vacío, se intenta adivinar)
-          <input name="tema" list="lista-temas"></label>
-        <datalist id="lista-temas">${datos.unir.map((u) => `<option value="${esc(u.titulo)}">`).join("")}</datalist>
-        <button>Añadir</button><span class="msg"></span>
-      </form></details>
-
-    <details><summary>Ejercicio de unir</summary>
-      <form id="f-unir">
-        <label>Título<input name="titulo" required></label>
-        <label>Parejas, una por línea, con el formato: japonés = español
-          <textarea name="pares" rows="5" placeholder="猫 = gato&#10;犬 = perro" required></textarea></label>
-        <button>Añadir</button><span class="msg"></span>
-      </form></details>
-
-    <details><summary>Completar huecos</summary>
-      <form id="f-huecos">
-        <label>Frase, con los huecos entre [corchetes]
-          <input name="frase" placeholder="私は[水]を[飲みます]。" required></label>
-        <label>Traducción al español (es lo que verás en el selector)
-          <input name="traduccion" placeholder="Bebo agua." required></label>
-        <label>Palabras que sobran (separadas por comas)
-          <input name="extras" placeholder="食べます, 本"></label>
-        <button>Añadir</button><span class="msg"></span>
-      </form></details>
-
-    <button id="reset">Restaurar ejemplos</button>`;
-
-  // Función genérica: conecta un formulario con una función que lo procesa.
-  // "proceso" devuelve un texto de error, o null si todo fue bien.
-  function conectar(id, proceso) {
-    const f = $(id);
-    f.onsubmit = (e) => {
-      e.preventDefault(); // evita que el navegador recargue la página
-      const error = proceso(f.elements);
-      const msg = f.querySelector(".msg");
-      if (error) { msg.textContent = error; return; }
-      guardar();
-      f.reset();
-      msg.textContent = "Añadido ✓";
-    };
-  }
-
-  conectar("#f-test", (c) => {
-    datos.test.push({ pregunta: c.pregunta.value.trim(), correcta: c.correcta.value.trim(), incorrectas: lineas(c.incorrectas.value) });
-    return null;
-  });
-  conectar("#f-tarjeta", (c) => {
-    const nueva = { anverso: c.anverso.value.trim(), reverso: c.reverso.value.trim() };
-    nueva.tema = c.tema.value.trim() || temaDe(nueva);
-    datos.tarjetas.push(nueva);
-    return null;
-  });
-  conectar("#f-unir", (c) => {
-    // Cada línea "a = b" se corta por el "=" y se convierte en un par [a, b]
-    const pares = lineas(c.pares.value).map((l) => l.split("=").map((s) => s.trim())).filter((p) => p[0] && p[1]);
-    if (pares.length < 2) return "Escribe al menos 2 parejas con el formato japonés = español.";
-    datos.unir.push({ titulo: c.titulo.value.trim(), pares });
-    return null;
-  });
-  conectar("#f-huecos", (c) => {
-    const frase = c.frase.value.trim();
-    if (!/\[.+?\]/.test(frase)) return "Marca al menos un hueco con [corchetes].";
-    const extras = c.extras.value.split(",").map((s) => s.trim()).filter(Boolean);
-    datos.huecos.push({ frase, traduccion: c.traduccion.value.trim(), extras });
-    return null;
-  });
-
-  $("#reset").onclick = () => {
-    if (confirm("Se borrarán tus ejercicios y volverán los de ejemplo. ¿Seguro?")) {
-      datos = structuredClone(EJEMPLOS); guardar(); verCrear();
-    }
-  };
-}
-
-// ================= 8. ARRANQUE Y MENÚ =================
+// ================= 7. ARRANQUE Y MENÚ =================
 const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
-  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, crear: verCrear };
+  huecos: () => { nuevaSesion("huecos"); verHuecos(0); } };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {
@@ -470,5 +361,4 @@ document.querySelectorAll("nav button").forEach((b) => {
   };
 });
 
-cargar();
 verTest(); // sección inicial

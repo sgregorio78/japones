@@ -61,12 +61,7 @@ button:disabled { cursor: default; }
   animation: aparece .25s ease-out;
 }
 .tarjeta:hover:not(:disabled) { background: var(--capas), var(--papel-t); } /* anula el hover de los botones */
-.tarjeta::before { /* etiqueta "ANVERSO" / "REVERSO" tomada del atributo data-lado */
-  content: attr(data-lado); position: absolute; top: 16px; left: 18px;
-  font-size: .72rem; letter-spacing: .12em; text-transform: uppercase; color: var(--suave);
-}
 .tarjeta.reverso { --papel-t: #fff0b3; --linea-t: #ecd77f; --borde-t: #d4bd5e; --texto-t: #3d2f00; }
-.tarjeta.reverso::before { color: #7a6200; }
 @keyframes aparece { from { transform: perspective(700px) rotateX(-70deg); opacity: .4; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .tarjeta { animation: none; } }
 .fila { display: flex; gap: 8px; align-items: center; }
@@ -105,16 +100,10 @@ option.mal { color: var(--mal); }  /* por eso también llevan ✅ / ❌ delante 
 .hueco .palabra { border: none; padding: 0 6px; }
 .hueco.ok, .hueco.mal { background: none !important; }
 
-/* Formularios de la sección Crear */
-details { background: var(--papel); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
-summary { cursor: pointer; font-weight: 600; }
-label { display: block; margin-top: 10px; font-size: .9rem; color: var(--suave); }
-input, textarea, select {
-  width: 100%; font: inherit; padding: 8px; border: 1px solid var(--borde);
+/* Desplegables (temas de tarjetas y selector de ejercicios) */
+select {
+  width: 100%; font: inherit; padding: 8px; margin-bottom: 8px; border: 1px solid var(--borde);
   border-radius: 6px; color: var(--tinta); background: #fff;
 }
-form button { margin-top: 12px; background: var(--tinta); color: #fff; }
-.msg { margin-left: 10px; font-size: .9rem; }
-select { margin-bottom: 8px; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
