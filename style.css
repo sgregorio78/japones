@@ -1,0 +1,95 @@
+/* CSS = el ASPECTO. Empezamos definiendo los colores como "variables" (--nombre)
+   para poder cambiar toda la paleta tocando solo estas líneas. */
+:root {
+  --fondo: #eef1f7;
+  --papel: #ffffff;
+  --tinta: #1f2a5a;      /* azul índigo, el color del texto y botones */
+  --suave: #5b6592;
+  --acento: #d4456b;     /* rosa sakura, para lo seleccionado */
+  --ok: #2e8b57;
+  --mal: #c0392b;
+  --borde: #c9d0e6;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--fondo); color: var(--tinta);
+  /* Fuentes con soporte japonés; el navegador usa la primera que encuentre */
+  font-family: "Hiragino Sans", "Yu Gothic", "Noto Sans JP", system-ui, sans-serif;
+  line-height: 1.5;
+}
+header { background: var(--tinta); padding: 12px 16px; }
+h1 { margin: 0 0 8px; font-size: 1.3rem; color: #fff; }
+nav { display: flex; gap: 6px; flex-wrap: wrap; }
+nav button { background: transparent; color: #cfd5f0; border: 1px solid #5b6592; }
+nav button.activo { background: #fff; color: var(--tinta); }
+
+main { max-width: 640px; margin: 20px auto; padding: 0 16px 40px; }
+h2 { font-size: 1.35rem; margin: 12px 0; }
+.prog, .aviso, .fb { color: var(--suave); }
+.grande { font-size: 3rem; margin: 8px 0; }
+
+/* Botones en general */
+button {
+  font: inherit; cursor: pointer; padding: 10px 14px; border-radius: 6px;
+  border: 1px solid var(--tinta); background: var(--papel); color: var(--tinta);
+}
+button:hover:not(:disabled) { background: #e3e8f8; }
+/* Muestra un borde visible al navegar con el teclado (accesibilidad) */
+:focus-visible { outline: 3px solid var(--acento); outline-offset: 2px; }
+button:disabled { cursor: default; }
+
+/* Test: respuestas en columna */
+.opciones { display: grid; gap: 8px; }
+.op { text-align: left; font-size: 1.1rem; }
+.ok { background: #dff3e7 !important; border-color: var(--ok); color: var(--ok); }
+.mal { background: #f9e0dd !important; border-color: var(--mal); color: var(--mal); }
+
+/* Tarjetas */
+.tarjeta {
+  display: block; width: 100%; min-height: 180px; margin: 12px 0;
+  font-size: 2.2rem; background: var(--papel); border: 2px solid var(--borde);
+}
+.tarjeta.reverso { background: var(--tinta); color: #fff; }
+.fila { display: flex; gap: 8px; align-items: center; }
+
+/* Unir: dos columnas */
+.columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.columnas > div { display: grid; gap: 8px; align-content: start; }
+.item { font-size: 1.1rem; }
+.item.sel { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento); }
+
+/* Unir: las palabras resueltas se deslizan hacia abajo (la animación la hace app.js) */
+.item { position: relative; }
+.item.moviendo { z-index: 2; }
+/* Marcador fijo arriba para verlo aunque la página se desplace */
+.marcador { position: sticky; top: 0; z-index: 3; padding: 8px 0; margin-bottom: 8px; background: var(--fondo); }
+
+/* Huecos */
+.frase { font-size: 1.6rem; line-height: 2.6; background: var(--papel); padding: 12px 16px; border-radius: 8px; }
+.hueco {
+  display: inline-block; min-width: 4.5em; min-height: 1.9em; vertical-align: middle;
+  border-bottom: 3px solid var(--tinta); margin: 0 4px; text-align: center; line-height: 1.9;
+}
+.hueco.sobre { background: #fbe3ea; }   /* se activa al arrastrar encima */
+.banco { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; min-height: 48px; }
+.palabra {
+  background: var(--papel); border: 1px solid var(--tinta); border-radius: 6px;
+  padding: 4px 12px; font-size: 1.3rem; cursor: grab; user-select: none;
+}
+.palabra.sel { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento); }
+.hueco .palabra { border: none; padding: 0 6px; }
+.hueco.ok, .hueco.mal { background: none !important; }
+
+/* Formularios de la sección Crear */
+details { background: var(--papel); border-radius: 8px; padding: 10px 14px; margin-bottom: 10px; }
+summary { cursor: pointer; font-weight: 600; }
+label { display: block; margin-top: 10px; font-size: .9rem; color: var(--suave); }
+input, textarea, select {
+  width: 100%; font: inherit; padding: 8px; border: 1px solid var(--borde);
+  border-radius: 6px; color: var(--tinta); background: #fff;
+}
+form button { margin-top: 12px; background: var(--tinta); color: #fff; }
+.msg { margin-left: 10px; font-size: .9rem; }
+select { margin-bottom: 8px; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

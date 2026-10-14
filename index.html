@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<!-- HTML = la ESTRUCTURA de la página. Aquí solo ponemos el "esqueleto";
+     el contenido de cada ejercicio lo genera app.js dentro de <main id="app">. -->
+<html lang="es">
+<head>
+  <!-- UTF-8 es imprescindible para que los caracteres japoneses se vean bien -->
+  <meta charset="UTF-8">
+  <!-- Hace que la página se adapte al ancho del móvil -->
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>日本語ノート · Repaso de japonés</title>
+  <!-- Enlazamos el archivo de estilos -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>日本語ノート</h1>
+    <!-- Menú: cada botón tiene data-sec, que app.js usa para saber qué sección mostrar -->
+    <nav>
+      <button data-sec="test" class="activo">Test</button>
+      <button data-sec="tarjetas">Tarjetas</button>
+      <button data-sec="unir">Unir</button>
+      <button data-sec="huecos">Huecos</button>
+      <button data-sec="crear">Crear</button>
+    </nav>
+  </header>
+
+  <!-- Aquí app.js "dibuja" el ejercicio actual -->
+  <main id="app"></main>
+
+  <!-- "defer" = ejecutar el script cuando la página ya está cargada -->
+  <script src="ejemplos.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
