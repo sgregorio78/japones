@@ -38,11 +38,44 @@ function mezclar(lista) {
 function vacio() {
   app.innerHTML = `<p class="aviso">Aún no hay ejercicios de este tipo. Añade alguno en la sección «Crear».</p>`;
 }
-// Desplegable para elegir entre varios ejercicios del mismo tipo
-function selectorHtml(lista, nombre, actual) {
-  return `<select id="sel" aria-label="Elegir ejercicio">${lista
-    .map((e, i) => `<option value="${i}" ${i === actual ? "selected" : ""}>${esc(nombre(e, i))}</option>`)
-    .join("")}</select>`;
+// ----- Sesión de práctica (para los ejercicios de unir y de huecos) -----
+// Al entrar en una sección se crea una "sesión": un orden aleatorio de los ejercicios y
+// una anotación de cuáles has terminado y cómo ("ok" = todo bien, "mal" = con fallos).
+// Vive solo en memoria: al cambiar de sección o recargar la página se empieza de cero.
+const sesion = {};
+function nuevaSesion(tipo) {
+  sesion[tipo] = { orden: mezclar(datos[tipo].map((_, i) => i)), resultado: {} };
+}
+const MARCAS = { ok: "✅ ", mal: "❌ " };
+
+// Barra con botón anterior, desplegable y botón siguiente.
+// "pos" es la posición dentro del orden aleatorio; "nombre" da el texto de cada opción.
+function barraHtml(tipo, nombre, pos) {
+  const s = sesion[tipo];
+  const opciones = s.orden.map((idx, p) => {
+    const estado = s.resultado[idx] || "";
+    const texto = nombre(datos[tipo][idx], idx);
+    return `<option value="${p}" class="${estado}" data-nombre="${esc(texto)}" ${p === pos ? "selected" : ""}>${MARCAS[estado] || ""}${esc(texto)}</option>`;
+  }).join("");
+  return `<div class="barra">
+    <button id="prev" aria-label="Ejercicio anterior">←</button>
+    <select id="sel" aria-label="Elegir ejercicio">${opciones}</select>
+    <button id="next" aria-label="Ejercicio siguiente">→</button></div>`;
+}
+// Conecta la barra: "ver" es la función que dibuja un ejercicio a partir de su posición
+function conectarBarra(tipo, pos, ver) {
+  const n = sesion[tipo].orden.length;
+  $("#sel").onchange = (e) => ver(Number(e.target.value));
+  $("#prev").onclick = () => ver((pos - 1 + n) % n); // al llegar al principio, salta al final
+  $("#next").onclick = () => ver((pos + 1) % n);     // al llegar al final, vuelve al principio
+}
+// Anota el resultado y actualiza la opción del desplegable sin recargar el ejercicio
+function anotarResultado(tipo, pos, estado) {
+  const s = sesion[tipo];
+  s.resultado[s.orden[pos]] = estado;
+  const opcion = $("#sel").options[pos];
+  opcion.className = estado;
+  opcion.textContent = MARCAS[estado] + opcion.dataset.nombre;
 }
 
 // ================= 3. TIPO 1: TEST (pregunta y varias respuestas) =================
@@ -152,9 +185,9 @@ function bajarPalabras(movimientos, clase, alTerminar) {
   }, DURACION + 50);
 }
 
-function verUnir(n = 0) {
+function verUnir(pos = 0) {
   if (!datos.unir.length) return vacio();
-  const ej = datos.unir[Math.min(n, datos.unir.length - 1)];
+  const ej = datos.unir[sesion.unir.orden[pos]];
   const total = ej.pares.length;
   // Cada elemento recuerda el número de su pareja (i): así sabemos si encajan
   const izq = ej.pares.map((p, i) => ({ t: p[0], i }));
@@ -162,12 +195,12 @@ function verUnir(n = 0) {
   const boton = (x, lado) => `<button class="item ${lado}" data-i="${x.i}">${esc(x.t)}</button>`;
 
   app.innerHTML = `
-    ${selectorHtml(datos.unir, (e) => e.titulo, n)}
+    ${barraHtml("unir", (e) => e.titulo, pos)}
     <h2>Une cada pareja</h2>
     <div class="marcador"><span id="marc">Aciertos: 0 de ${total}</span></div>
     <div class="columnas"><div id="col-izq">${izq.map((x) => boton(x, "izq")).join("")}</div>
     <div id="col-der">${der.map((x) => boton(x, "der")).join("")}</div></div>`;
-  $("#sel").onchange = (e) => verUnir(Number(e.target.value));
+  conectarBarra("unir", pos, verUnir);
 
   const colIzq = $("#col-izq"), colDer = $("#col-der");
   let elegido = null;   // botón de la izquierda seleccionado
@@ -177,8 +210,9 @@ function verUnir(n = 0) {
   function alTerminar() {
     ocupado = false;
     if (resueltas === total) {
+      anotarResultado("unir", pos, aciertos === total ? "ok" : "mal");
       $("#marc").innerHTML = `¡Terminado! Has acertado ${aciertos} de ${total}. <button id="rep">Repetir</button>`;
-      $("#rep").onclick = () => verUnir(n);
+      $("#rep").onclick = () => verUnir(pos);
     }
   }
 
@@ -211,9 +245,9 @@ function verUnir(n = 0) {
 }
 
 // ================= 6. TIPO 4: COMPLETAR HUECOS (arrastrar palabras) =================
-function verHuecos(n = 0) {
+function verHuecos(pos = 0) {
   if (!datos.huecos.length) return vacio();
-  const ej = datos.huecos[Math.min(n, datos.huecos.length - 1)];
+  const ej = datos.huecos[sesion.huecos.orden[pos]];
 
   // split con paréntesis conserva los trozos "[...]": "私は[水]を" -> ["私は", "[水]", "を"]
   const trozos = ej.frase.split(/(\[.+?\])/);
@@ -230,13 +264,13 @@ function verHuecos(n = 0) {
   const palabras = mezclar([...respuestas, ...ej.extras]);
 
   app.innerHTML = `
-    ${selectorHtml(datos.huecos, (e, i) => e.traduccion || "Ejercicio " + (i + 1), n)}
+    ${barraHtml("huecos", (e, i) => e.traduccion || "Ejercicio " + (i + 1), pos)}
     <h2>Traduce la frase: arrastra cada palabra a su hueco</h2>
     <div class="frase">${fraseHtml}</div>
     <div class="banco">${palabras.map((p) => `<span class="palabra" draggable="true">${esc(p)}</span>`).join("")}</div>
     <div class="fila"><button id="comp">Comprobar</button><button id="reint">Reintentar</button></div>
     <p id="fb" class="fb"></p>`;
-  $("#sel").onchange = (e) => verHuecos(Number(e.target.value));
+  conectarBarra("huecos", pos, verHuecos);
 
   const banco = $(".banco");
   let arrastrada = null; // palabra que se está arrastrando
@@ -274,6 +308,7 @@ function verHuecos(n = 0) {
   banco.ondragover = (e) => e.preventDefault();
   banco.ondrop = () => { if (arrastrada) banco.appendChild(arrastrada); };
 
+  let comprobado = false; // solo cuenta la primera comprobación de cada intento
   $("#comp").onclick = () => {
     let bien = 0;
     app.querySelectorAll(".hueco").forEach((h) => {
@@ -282,9 +317,13 @@ function verHuecos(n = 0) {
       h.classList.add(ok ? "ok" : "mal");
       if (ok) bien++;
     });
+    if (!comprobado) {
+      comprobado = true;
+      anotarResultado("huecos", pos, bien === respuestas.length ? "ok" : "mal");
+    }
     $("#fb").textContent = `${bien} de ${respuestas.length} huecos correctos.`;
   };
-  $("#reint").onclick = () => verHuecos(n);
+  $("#reint").onclick = () => verHuecos(pos);
 }
 
 // ================= 7. SECCIÓN CREAR =================
@@ -378,7 +417,8 @@ function verCrear() {
 }
 
 // ================= 8. ARRANQUE Y MENÚ =================
-const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => verUnir(0), huecos: () => verHuecos(0), crear: verCrear };
+const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
+  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, crear: verCrear };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {

@@ -58,6 +58,12 @@ button:disabled { cursor: default; }
 .item { font-size: 1.1rem; }
 .item.sel { border-color: var(--acento); box-shadow: 0 0 0 2px var(--acento); }
 
+/* Barra de ejercicio: botón anterior, desplegable, botón siguiente */
+.barra { display: flex; gap: 8px; margin-bottom: 8px; }
+.barra select { flex: 1; min-width: 0; margin-bottom: 0; }
+option.ok { color: var(--ok); }    /* algunos navegadores (sobre todo en móvil) ignoran el color */
+option.mal { color: var(--mal); }  /* por eso también llevan ✅ / ❌ delante */
+
 /* Unir: las palabras resueltas se deslizan hacia abajo (la animación la hace app.js) */
 .item { position: relative; }
 .item.moviendo { z-index: 2; }
