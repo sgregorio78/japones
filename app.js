@@ -83,38 +83,78 @@ function anotarResultado(tipo, pos, estado) {
 }
 
 // ================= 3. TIPO 1: TEST (pregunta y varias respuestas) =================
-function verTest() {
+// Si fallas una pregunta, se vuelve a hacer 2 preguntas después (y así hasta que la aciertes).
+// "grupo" puede ser "todo", "50", "100" (preguntas al azar) o el nombre de un tema.
+function verTest(grupo = "todo") {
   if (!datos.test.length) return vacio();
-  const lista = mezclar(datos.test);
-  let i = 0, puntos = 0; // pregunta actual y aciertos
+  const temas = listaDeTemas(datos.test);
+  if (!["todo", "50", "100"].includes(grupo) && !temas.includes(grupo)) grupo = "todo";
+  const delTema = (q) => q.tema || "Sin tema";
+  const baraja = mezclar(datos.test); // todas las preguntas, en orden aleatorio
+  // Cola de preguntas del grupo elegido: aquí se van metiendo las falladas
+  const lista = (grupo === "50" || grupo === "100") ? baraja.slice(0, Number(grupo))
+    : grupo === "todo" ? baraja : baraja.filter((q) => delTema(q) === grupo);
+  const total = lista.length; // se calcula ahora, antes de añadir repeticiones
+
+  // Desplegable de grupos. Las opciones de 50 y 100 solo salen si hay más preguntas que eso.
+  const opcion = (valor, texto) => `<option value="${esc(valor)}" ${valor === grupo ? "selected" : ""}>${esc(texto)}</option>`;
+  const selector = () => `<select id="grupo" aria-label="Grupo de preguntas">
+    ${opcion("todo", `Todas (${datos.test.length})`)}
+    ${datos.test.length > 50 ? opcion("50", "50 preguntas al azar") : ""}
+    ${datos.test.length > 100 ? opcion("100", "100 preguntas al azar") : ""}
+    ${temas.map((t) => opcion(t, `${t} (${datos.test.filter((q) => delTema(q) === t).length})`)).join("")}</select>`;
+  const conectarGrupo = () => { $("#grupo").onchange = (e) => verTest(e.target.value); }; // cambia de grupo y empieza de nuevo
+  const vistas = new Set();          // preguntas que ya has contestado al menos una vez
+  let i = 0, puntos = 0, repasos = 0; // posición actual, aciertos a la primera, repeticiones
 
   function mostrar() {
-    // Si ya no quedan preguntas, enseñamos el resultado
+    // Si ya no quedan preguntas en la cola, enseñamos el resultado
     if (i >= lista.length) {
-      app.innerHTML = `<h2>Resultado</h2><p class="grande">${puntos} / ${lista.length}</p><button id="rep">Repetir test</button>`;
-      $("#rep").onclick = verTest;
+      app.innerHTML = `${selector()}<h2>Resultado</h2>
+        <p class="grande">${puntos} / ${total}</p>
+        <p class="aviso">Aciertos a la primera. Veces que se ha repetido una pregunta por fallarla: ${repasos}.</p>
+        <button id="rep">Repetir test</button>`;
+      conectarGrupo();
+      $("#rep").onclick = () => verTest(grupo);
       return;
     }
     const p = lista[i];
+    const esRepaso = vistas.has(p); // true si es una pregunta que ya habías fallado
     const opciones = mezclar([p.correcta, ...p.incorrectas]); // "..." = desplegar la lista
     app.innerHTML = `
-      <p class="prog">Pregunta ${i + 1} de ${lista.length}</p>
+      ${selector()}
+      <p class="prog">${esRepaso ? "Repaso de una pregunta fallada" : `Pregunta ${vistas.size + 1} de ${total}`}</p>
       <h2>${esc(p.pregunta)}</h2>
       <div class="opciones">${opciones.map((o) => `<button class="op">${esc(o)}</button>`).join("")}</div>
       <p id="fb" class="fb"></p>
       <button id="sig" hidden>Siguiente</button>`;
 
+    conectarGrupo();
     app.querySelectorAll(".op").forEach((boton) => {
       boton.onclick = () => {
         const acierto = boton.textContent === p.correcta;
-        if (acierto) puntos++;
+        // La puntuación solo cuenta el primer intento de cada pregunta
+        if (!esRepaso) {
+          vistas.add(p);
+          if (acierto) puntos++;
+        }
         // Bloqueamos todos los botones y coloreamos la solución
         app.querySelectorAll(".op").forEach((b) => {
           b.disabled = true;
           if (b.textContent === p.correcta) b.classList.add("ok");
         });
-        if (!acierto) boton.classList.add("mal");
-        $("#fb").textContent = acierto ? "¡Correcto!" : "Incorrecto.";
+        if (acierto) {
+          $("#fb").textContent = "¡Correcto!";
+        } else {
+          boton.classList.add("mal");
+          // Preguntas que quedan por delante (máximo 2) antes de volver a hacerla
+          const entre = Math.min(2, lista.length - i - 1);
+          // splice(posición, 0, p) mete p en la cola sin borrar nada
+          // (si la posición pasa del final, la añade al final)
+          lista.splice(i + 3, 0, p);
+          repasos++;
+          $("#fb").textContent = `Incorrecto. Volverá a salir ${entre ? `tras ${entre} ${entre === 1 ? "pregunta" : "preguntas"}` : "a continuación"}.`;
+        }
         $("#sig").hidden = false;
       };
     });
@@ -125,9 +165,10 @@ function verTest() {
 
 // ================= 4. TIPO 2: TARJETAS DE ESTUDIO =================
 // Cada tarjeta tiene un "tema": los mismos nombres que los ejercicios de unir.
-// Devuelve los temas que tienen tarjetas, en el orden de los ejercicios de unir.
-function temasTarjetas() {
-  const usados = new Set(datos.tarjetas.map((t) => t.tema || "Sin tema"));
+// Devuelve los temas que aparecen en una lista (tarjetas, preguntas...), en el orden
+// de los ejercicios de unir. Sirve para las tarjetas y para el test.
+function listaDeTemas(items) {
+  const usados = new Set(items.map((t) => t.tema || "Sin tema"));
   const temas = datos.unir.map((u) => u.titulo).filter((t) => usados.has(t));
   usados.forEach((t) => { if (!temas.includes(t)) temas.push(t); }); // temas propios
   return temas;
@@ -135,7 +176,7 @@ function temasTarjetas() {
 
 function verTarjetas(tema = "todo") { // "todo" = repasar todas las tarjetas
   if (!datos.tarjetas.length) return vacio();
-  const temas = temasTarjetas();
+  const temas = listaDeTemas(datos.tarjetas);
   if (tema !== "todo" && !temas.includes(tema)) tema = "todo";
   const delTema = (t) => (t.tema || "Sin tema");
   const lista = mezclar(datos.tarjetas.filter((t) => tema === "todo" || delTema(t) === tema));
