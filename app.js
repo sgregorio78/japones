@@ -1,5 +1,5 @@
-/* JavaScript = la LÓGICA. Este archivo tiene 7 partes:
-   1. Datos   2. Utilidades   3-6. Los 4 tipos de ejercicio   7. Arranque */
+/* JavaScript = la LÓGICA. Este archivo tiene 8 partes:
+   1. Datos   2. Utilidades   3-6. Los 4 tipos de ejercicio   7. Canciones   8. Arranque */
 "use strict"; // modo estricto: avisa de errores tontos
 
 // ================= 1. DATOS =================
@@ -349,9 +349,46 @@ function verHuecos(pos = 0) {
   $("#reint").onclick = () => verHuecos(pos);
 }
 
-// ================= 7. ARRANQUE Y MENÚ =================
+// ================= 7. CANCIONES (no es un ejercicio: es una sección de lectura) =================
+// Las letras están en canciones.js (la lista CANCIONES). Cada verso se muestra en japonés
+// y, al tocarlo, aparece su traducción debajo.
+function verCanciones(n = 0) {
+  if (!CANCIONES.length) return vacio();
+  const c = CANCIONES[n];
+  const opciones = CANCIONES.map((x, i) =>
+    `<option value="${i}" ${i === n ? "selected" : ""}>${esc(x.titulo)} · ${esc(x.artista)}</option>`).join("");
+  // Un verso vacío (jp: "") es un separador entre estrofas
+  const versos = c.letra.map((l) => l.jp
+    ? `<button class="verso" aria-expanded="false"><span class="jp">${esc(l.jp)}</span><span class="es">${esc(l.es || "")}</span></button>`
+    : `<div class="separador"></div>`).join("");
+
+  app.innerHTML = `
+    <select id="cancion" aria-label="Canción">${opciones}</select>
+    ${c.nota ? `<p class="aviso">${esc(c.nota)}</p>` : ""}
+    ${c.letra.length
+      ? `<div class="fila"><button id="todo">Mostrar / ocultar todas las traducciones</button></div><div class="letra">${versos}</div>`
+      : `<p class="aviso">Todavía no hay letra. Añádela en canciones.js (las instrucciones están al principio del archivo).</p>`}`;
+
+  $("#cancion").onchange = (e) => verCanciones(Number(e.target.value));
+  const botones = app.querySelectorAll(".verso");
+  botones.forEach((b) => {
+    b.onclick = () => { // toca un verso: muestra u oculta su traducción
+      b.classList.toggle("abierto");
+      b.setAttribute("aria-expanded", b.classList.contains("abierto"));
+    };
+  });
+  if ($("#todo")) $("#todo").onclick = () => {
+    const algunoCerrado = [...botones].some((b) => !b.classList.contains("abierto"));
+    botones.forEach((b) => {
+      b.classList.toggle("abierto", algunoCerrado);
+      b.setAttribute("aria-expanded", algunoCerrado);
+    });
+  };
+}
+
+// ================= 8. ARRANQUE Y MENÚ =================
 const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
-  huecos: () => { nuevaSesion("huecos"); verHuecos(0); } };
+  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, canciones: () => verCanciones(0) };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {

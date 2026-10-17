@@ -106,4 +106,15 @@ select {
   border-radius: 6px; color: var(--tinta); background: #fff;
 }
 
+/* Canciones: cada verso es un botón; al tocarlo aparece la traducción */
+.letra { background: var(--papel); border-radius: 8px; padding: 12px 8px; margin-top: 12px; }
+.verso {
+  display: block; width: 100%; text-align: left; padding: 6px 12px; border: none;
+  background: transparent; border-radius: 6px;
+}
+.verso .jp { display: block; font-size: 1.35rem; line-height: 1.6; }
+.verso .es { display: none; font-size: .95rem; color: var(--suave); }
+.verso.abierto .es { display: block; }
+.separador { height: 18px; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
