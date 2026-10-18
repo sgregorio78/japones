@@ -1,5 +1,5 @@
-/* JavaScript = la LÓGICA. Este archivo tiene 8 partes:
-   1. Datos   2. Utilidades   3-6. Los 4 tipos de ejercicio   7. Canciones   8. Arranque */
+/* JavaScript = la LÓGICA. Este archivo tiene 9 partes:
+   1. Datos   2. Utilidades   3-6. Los 4 tipos de ejercicio   7. Dictado   8. Canciones   9. Arranque */
 "use strict"; // modo estricto: avisa de errores tontos
 
 // ================= 1. DATOS =================
@@ -390,7 +390,105 @@ function verHuecos(pos = 0) {
   $("#reint").onclick = () => verHuecos(pos);
 }
 
-// ================= 7. CANCIONES (no es un ejercicio: es una sección de lectura) =================
+// ================= 7. DICTADO (escribe lo que oyes) =================
+// Usa la síntesis de voz del navegador (Web Speech API): speechSynthesis lee un texto en voz alta.
+// No hace falta instalar nada ni conectarse a ningún servicio. La voz japonesa depende de tu dispositivo.
+function hablar(texto, lento) {
+  if (!("speechSynthesis" in window)) return;
+  speechSynthesis.cancel(); // corta lo que estuviera sonando
+  const voz = new SpeechSynthesisUtterance(texto);
+  voz.lang = "ja-JP";
+  voz.rate = lento ? 0.6 : 0.9; // 1 = velocidad normal
+  speechSynthesis.speak(voz);
+}
+// Para comparar solo las letras: quita espacios y signos y unifica caracteres parecidos
+const limpiar = (t) => t.normalize("NFKC").replace(/[\s、。,.!?！？・「」]/g, "");
+
+function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el nombre de un tema
+  // Palabras de los ejercicios de unir, sin repetir
+  const todas = [], yaEsta = new Set();
+  datos.unir.forEach((u) => u.pares.forEach(([jp, es]) => {
+    if (!yaEsta.has(jp)) { yaEsta.add(jp); todas.push({ jp, es, tema: u.titulo }); }
+  }));
+  if (!todas.length) return vacio();
+  const temas = listaDeTemas(todas);
+  if (!["20", "todo"].includes(grupo) && !temas.includes(grupo)) grupo = "20";
+  const baraja = mezclar(todas);
+  const lista = grupo === "20" ? baraja.slice(0, 20)
+    : grupo === "todo" ? baraja : baraja.filter((x) => x.tema === grupo);
+  const total = lista.length;
+  const vistas = new Set(); // palabras ya intentadas; las falladas se repiten 2 después, como en el test
+  let i = 0, puntos = 0, repasos = 0;
+
+  const opcion = (valor, texto) => `<option value="${esc(valor)}" ${valor === grupo ? "selected" : ""}>${esc(texto)}</option>`;
+  const selector = () => `<select id="grupo" aria-label="Grupo de palabras">
+    ${opcion("20", "20 palabras al azar")}${opcion("todo", `Todas (${todas.length})`)}
+    ${temas.map((t) => opcion(t, `${t} (${todas.filter((x) => x.tema === t).length})`)).join("")}</select>`;
+  // Aviso si el dispositivo no puede leer en voz alta o no tiene voz japonesa
+  const voces = "speechSynthesis" in window ? speechSynthesis.getVoices() : [];
+  const aviso = !("speechSynthesis" in window) ? "Tu navegador no puede leer en voz alta."
+    : (voces.length && !voces.some((v) => v.lang.toLowerCase().replace("_", "-").startsWith("ja")))
+      ? "Tu dispositivo no parece tener una voz japonesa instalada; puede sonar con acento extraño." : "";
+
+  function mostrar() {
+    if (i >= lista.length) {
+      app.innerHTML = `${selector()}<h2>Resultado</h2><p class="grande">${puntos} / ${total}</p>
+        <p class="aviso">Aciertos a la primera. Veces que se ha repetido una palabra por fallarla: ${repasos}.</p>
+        <button id="rep">Repetir</button>`;
+      $("#grupo").onchange = (e) => verDictado(e.target.value);
+      $("#rep").onclick = () => verDictado(grupo);
+      return;
+    }
+    const p = lista[i];
+    const esRepaso = vistas.has(p);
+    app.innerHTML = `
+      ${selector()}
+      <p class="prog">${esRepaso ? "Repaso de una palabra fallada" : `Palabra ${vistas.size + 1} de ${total}`}</p>
+      ${aviso ? `<p class="aviso">${esc(aviso)}</p>` : ""}
+      <div class="fila"><button id="oir">🔊 Escuchar</button><button id="lento">🐢 Más lento</button></div>
+      <input id="resp" class="entrada" lang="ja" autocomplete="off" autocapitalize="off" spellcheck="false"
+        placeholder="Escribe lo que oyes (hiragana o katakana)" aria-label="Lo que oyes">
+      <div class="fila"><button id="comp">Comprobar</button><button id="sig" hidden>Siguiente</button></div>
+      <p id="fb" class="fb"></p>`;
+    $("#grupo").onchange = (e) => verDictado(e.target.value);
+    $("#oir").onclick = () => hablar(p.jp, false);
+    $("#lento").onclick = () => hablar(p.jp, true);
+
+    const entrada = $("#resp");
+    let hecho = false; // true cuando ya has comprobado esta palabra
+    function comprobar() {
+      if (!limpiar(entrada.value)) return; // no hace nada si está vacío
+      hecho = true;
+      const acierto = limpiar(entrada.value) === limpiar(p.jp);
+      if (!esRepaso) { vistas.add(p); if (acierto) puntos++; } // solo cuenta el primer intento
+      entrada.readOnly = true;
+      entrada.classList.add(acierto ? "ok" : "mal");
+      if (acierto) {
+        $("#fb").textContent = `¡Correcto! ${p.jp} = ${p.es}`;
+      } else {
+        const entre = Math.min(2, lista.length - i - 1);
+        lista.splice(i + 3, 0, p); // la palabra vuelve a salir 2 palabras después
+        repasos++;
+        $("#fb").textContent = `Incorrecto. Era: ${p.jp} (${p.es}). Volverá a salir ${entre ? `tras ${entre} ${entre === 1 ? "palabra" : "palabras"}` : "a continuación"}.`;
+      }
+      $("#comp").hidden = true;
+      $("#sig").hidden = false;
+    }
+    const siguiente = () => { i++; mostrar(); };
+    $("#comp").onclick = comprobar;
+    $("#sig").onclick = siguiente;
+    // Intro comprueba o pasa a la siguiente. isComposing: no actuar mientras se está
+    // confirmando una conversión del teclado japonés (que también usa Intro).
+    entrada.onkeydown = (e) => {
+      if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); hecho ? siguiente() : comprobar(); }
+    };
+    entrada.focus();
+    hablar(p.jp, false); // lee la palabra al aparecer (si el navegador lo permite)
+  }
+  mostrar();
+}
+
+// ================= 8. CANCIONES (no es un ejercicio: es una sección de lectura) =================
 // Las letras están en canciones.js (la lista CANCIONES). Cada verso se muestra en japonés
 // y, al tocarlo, aparece su traducción debajo.
 function verCanciones(n = 0) {
@@ -427,9 +525,9 @@ function verCanciones(n = 0) {
   };
 }
 
-// ================= 8. ARRANQUE Y MENÚ =================
+// ================= 9. ARRANQUE Y MENÚ =================
 const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
-  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, canciones: () => verCanciones(0) };
+  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, dictado: () => verDictado(), canciones: () => verCanciones(0) };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {

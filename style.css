@@ -117,4 +117,11 @@ select {
 .verso.abierto .es { display: block; }
 .separador { height: 18px; }
 
+/* Dictado: campo donde escribes lo que oyes */
+.entrada {
+  display: block; width: 100%; margin: 12px 0; padding: 12px; font: inherit; font-size: 1.6rem;
+  border: 2px solid var(--borde); border-radius: 6px; color: var(--tinta); background: #fff;
+}
+/* (las clases .ok y .mal ya existen y ponen el campo en verde o rojo) */
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
