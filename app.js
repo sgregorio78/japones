@@ -1,5 +1,6 @@
-/* JavaScript = la LÓGICA. Este archivo tiene 9 partes:
-   1. Datos   2. Utilidades   3-6. Los 4 tipos de ejercicio   7. Dictado   8. Canciones   9. Arranque */
+/* JavaScript = la LÓGICA. Este archivo tiene 10 partes:
+   1. Datos y configuración   2. Utilidades   3-6. Los 4 tipos de ejercicio
+   7. Dictado   8. Canciones   9. Configuración   10. Arranque */
 "use strict"; // modo estricto: avisa de errores tontos
 
 // ================= 1. DATOS =================
@@ -22,6 +23,36 @@ function temaDe(t) {
 // Si una tarjeta no tiene "tema" en ejemplos.js, se le asigna uno automáticamente
 datos.tarjetas.forEach((t) => { if (!t.tema) t.tema = temaDe(t); });
 
+// ----- Configuración -----
+// Valores iniciales. Para añadir un ajuste nuevo: ponlo aquí, úsalo donde haga falta
+// y añade su control en la sección 9 (verConfiguracion).
+const CONFIG_INICIAL = {
+  test: {
+    repetirFallos: true, // ¿se repiten las preguntas falladas?
+    minEspera: 2,        // mínimo de preguntas que pasan antes de repetirla
+    maxEspera: 4         // máximo (se elige un número al azar entre los dos, ambos incluidos)
+  },
+  dictado: {             // mismos ajustes, pero independientes de los del test
+    repetirFallos: true,
+    minEspera: 2,
+    maxEspera: 4
+  }
+};
+let config = cargarConfig();
+// A diferencia de los ejercicios, la configuración sí se guarda en el navegador (localStorage)
+function cargarConfig() {
+  const c = structuredClone(CONFIG_INICIAL);
+  try {
+    const guardada = JSON.parse(localStorage.getItem("japones-config"));
+    // Para cada bloque (test, dictado...) lo guardado manda sobre lo inicial
+    if (guardada) for (const clave in c) Object.assign(c[clave], guardada[clave]);
+  } catch (e) { /* si no se puede leer, se usan los valores iniciales */ }
+  return c;
+}
+function guardarConfig() {
+  try { localStorage.setItem("japones-config", JSON.stringify(config)); } catch (e) { /* sin almacenamiento */ }
+}
+
 // ================= 2. UTILIDADES =================
 const app = document.querySelector("#app");
 const $ = (selector) => app.querySelector(selector); // atajo para buscar dentro de #app
@@ -38,6 +69,10 @@ function mezclar(lista) {
     [a[i], a[j]] = [a[j], a[i]];
   }
   return a;
+}
+// Número entero al azar entre min y max, ambos incluidos
+function aleatorio(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 function vacio() {
   app.innerHTML = `<p class="aviso">Aún no hay ejercicios de este tipo. Añade alguno en el archivo ejemplos.js.</p>`;
@@ -83,10 +118,12 @@ function anotarResultado(tipo, pos, estado) {
 }
 
 // ================= 3. TIPO 1: TEST (pregunta y varias respuestas) =================
-// Si fallas una pregunta, se vuelve a hacer 2 preguntas después (y así hasta que la aciertes).
+// Si está activado en Configuración, una pregunta fallada se repite tras un número al azar
+// de preguntas (entre el mínimo y el máximo configurados) y así hasta que la aciertes.
 // "grupo" puede ser "todo", "50", "100" (preguntas al azar) o el nombre de un tema.
 function verTest(grupo = "todo") {
   if (!datos.test.length) return vacio();
+  const { repetirFallos, minEspera, maxEspera } = config.test; // ajustes de la sección Configuración
   const temas = listaDeTemas(datos.test);
   if (!["todo", "50", "100"].includes(grupo) && !temas.includes(grupo)) grupo = "todo";
   const delTema = (q) => q.tema || "Sin tema";
@@ -112,7 +149,7 @@ function verTest(grupo = "todo") {
     if (i >= lista.length) {
       app.innerHTML = `${selector()}<h2>Resultado</h2>
         <p class="grande">${puntos} / ${total}</p>
-        <p class="aviso">Aciertos a la primera. Veces que se ha repetido una pregunta por fallarla: ${repasos}.</p>
+        <p class="aviso">Aciertos a la primera.${repetirFallos ? ` Veces que se ha repetido una pregunta por fallarla: ${repasos}.` : ""}</p>
         <button id="rep">Repetir test</button>`;
       conectarGrupo();
       $("#rep").onclick = () => verTest(grupo);
@@ -147,13 +184,15 @@ function verTest(grupo = "todo") {
           $("#fb").textContent = "¡Correcto!";
         } else {
           boton.classList.add("mal");
-          // Preguntas que quedan por delante (máximo 2) antes de volver a hacerla
-          const entre = Math.min(2, lista.length - i - 1);
-          // splice(posición, 0, p) mete p en la cola sin borrar nada
-          // (si la posición pasa del final, la añade al final)
-          lista.splice(i + 3, 0, p);
-          repasos++;
-          $("#fb").textContent = `Incorrecto. Volverá a salir ${entre ? `tras ${entre} ${entre === 1 ? "pregunta" : "preguntas"}` : "a continuación"}.`;
+          if (repetirFallos) {
+            // Cuántas preguntas pasan antes de repetirla: es una sorpresa, no se le dice al usuario
+            const espera = aleatorio(minEspera, maxEspera);
+            // splice(posición, 0, p) mete p en la cola sin borrar nada
+            // (si la posición pasa del final, la añade al final)
+            lista.splice(i + 1 + espera, 0, p);
+            repasos++;
+          }
+          $("#fb").textContent = `Incorrecto. Esta pregunta ${repetirFallos ? "se repetirá" : "no se repetirá"}.`;
         }
         $("#sig").hidden = false;
       };
@@ -411,13 +450,14 @@ function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el n
     if (!yaEsta.has(jp)) { yaEsta.add(jp); todas.push({ jp, es, tema: u.titulo }); }
   }));
   if (!todas.length) return vacio();
+  const { repetirFallos, minEspera, maxEspera } = config.dictado; // ajustes de la sección Configuración
   const temas = listaDeTemas(todas);
   if (!["20", "todo"].includes(grupo) && !temas.includes(grupo)) grupo = "20";
   const baraja = mezclar(todas);
   const lista = grupo === "20" ? baraja.slice(0, 20)
     : grupo === "todo" ? baraja : baraja.filter((x) => x.tema === grupo);
   const total = lista.length;
-  const vistas = new Set(); // palabras ya intentadas; las falladas se repiten 2 después, como en el test
+  const vistas = new Set(); // palabras ya intentadas; las falladas se repiten según la configuración
   let i = 0, puntos = 0, repasos = 0;
 
   const opcion = (valor, texto) => `<option value="${esc(valor)}" ${valor === grupo ? "selected" : ""}>${esc(texto)}</option>`;
@@ -433,7 +473,7 @@ function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el n
   function mostrar() {
     if (i >= lista.length) {
       app.innerHTML = `${selector()}<h2>Resultado</h2><p class="grande">${puntos} / ${total}</p>
-        <p class="aviso">Aciertos a la primera. Veces que se ha repetido una palabra por fallarla: ${repasos}.</p>
+        <p class="aviso">Aciertos a la primera.${repetirFallos ? ` Veces que se ha repetido una palabra por fallarla: ${repasos}.` : ""}</p>
         <button id="rep">Repetir</button>`;
       $("#grupo").onchange = (e) => verDictado(e.target.value);
       $("#rep").onclick = () => verDictado(grupo);
@@ -466,10 +506,12 @@ function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el n
       if (acierto) {
         $("#fb").textContent = `¡Correcto! ${p.jp} = ${p.es}`;
       } else {
-        const entre = Math.min(2, lista.length - i - 1);
-        lista.splice(i + 3, 0, p); // la palabra vuelve a salir 2 palabras después
-        repasos++;
-        $("#fb").textContent = `Incorrecto. Era: ${p.jp} (${p.es}). Volverá a salir ${entre ? `tras ${entre} ${entre === 1 ? "palabra" : "palabras"}` : "a continuación"}.`;
+        if (repetirFallos) {
+          // La palabra vuelve a salir tras un número de palabras al azar (sorpresa: no se le dice)
+          lista.splice(i + 1 + aleatorio(minEspera, maxEspera), 0, p);
+          repasos++;
+        }
+        $("#fb").textContent = `Incorrecto. Era: ${p.jp} (${p.es}). Esta palabra ${repetirFallos ? "se repetirá" : "no se repetirá"}.`;
       }
       $("#comp").hidden = true;
       $("#sig").hidden = false;
@@ -525,9 +567,62 @@ function verCanciones(n = 0) {
   };
 }
 
-// ================= 9. ARRANQUE Y MENÚ =================
+// ================= 9. CONFIGURACIÓN =================
+// Cada cambio se guarda al momento (no hay botón "Guardar").
+// Para un ajuste nuevo: añádelo a CONFIG_INICIAL (sección 1), úsalo donde haga falta
+// y añade aquí su control.
+function verConfiguracion() {
+  // Bloque con los ajustes de repetición de un ejercicio. "clave" es el nombre en config.
+  const bloque = (clave, titulo, singular, plural) => {
+    const c = config[clave];
+    const desactivado = c.repetirFallos ? "" : "disabled";
+    return `<fieldset>
+      <legend>${titulo}</legend>
+      <label class="ajuste"><span>Repetir las ${plural} que falle</span>
+        <input type="checkbox" id="${clave}-repetir" ${c.repetirFallos ? "checked" : ""}></label>
+      <label class="ajuste"><span>Mínimo de ${plural} de espera</span>
+        <input type="number" id="${clave}-min" min="0" max="50" value="${c.minEspera}" ${desactivado}></label>
+      <label class="ajuste"><span>Máximo de ${plural} de espera</span>
+        <input type="number" id="${clave}-max" min="0" max="50" value="${c.maxEspera}" ${desactivado}></label>
+      <p class="aviso">Al fallar, la ${singular} vuelve a salir tras un número de ${plural} elegido al azar
+        entre el mínimo y el máximo (ambos incluidos). La app solo avisa de si se repetirá, no de cuándo.</p>
+    </fieldset>`;
+  };
+
+  app.innerHTML = `
+    <h2>Configuración</h2>
+    ${bloque("test", "Test: preguntas falladas", "pregunta", "preguntas")}
+    ${bloque("dictado", "Dictado: palabras falladas", "palabra", "palabras")}
+    <div class="fila"><button id="restaurar">Restaurar valores iniciales</button><span id="msg" class="fb"></span></div>`;
+
+  // Conecta los tres campos de un bloque con su parte de config
+  function conectar(clave) {
+    const c = config[clave];
+    const repetir = $(`#${clave}-repetir`), min = $(`#${clave}-min`), max = $(`#${clave}-max`);
+    function aplicar(cambiado) {
+      // Lee los números, los limita a 0-50 y evita que el mínimo supere al máximo
+      const leer = (campo, antes) => {
+        const n = parseInt(campo.value, 10);
+        return Number.isNaN(n) ? antes : Math.min(50, Math.max(0, n));
+      };
+      let a = leer(min, c.minEspera), b = leer(max, c.maxEspera);
+      if (a > b) { if (cambiado === min) b = a; else a = b; } // se ajusta el campo que no has tocado
+      min.value = a; max.value = b;
+      min.disabled = max.disabled = !repetir.checked;
+      c.repetirFallos = repetir.checked; c.minEspera = a; c.maxEspera = b;
+      guardarConfig();
+      $("#msg").textContent = "Guardado ✓";
+    }
+    [repetir, min, max].forEach((campo) => { campo.onchange = () => aplicar(campo); });
+  }
+  conectar("test");
+  conectar("dictado");
+  $("#restaurar").onclick = () => { config = structuredClone(CONFIG_INICIAL); guardarConfig(); verConfiguracion(); };
+}
+
+// ================= 10. ARRANQUE Y MENÚ =================
 const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
-  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, dictado: () => verDictado(), canciones: () => verCanciones(0) };
+  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {
