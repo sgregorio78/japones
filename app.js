@@ -28,6 +28,7 @@ datos.tarjetas.forEach((t) => { if (!t.tema) t.tema = temaDe(t); });
 // y añade su control en la sección 9 (verConfiguracion).
 const CONFIG_INICIAL = {
   test: {
+    ocultarRespuestas: false, // ¿se ve solo la pregunta hasta pulsar "Mostrar respuestas"?
     repetirFallos: true, // ¿se repiten las preguntas falladas?
     minEspera: 2,        // mínimo de preguntas que pasan antes de repetirla
     maxEspera: 4         // máximo (se elige un número al azar entre los dos, ambos incluidos)
@@ -36,6 +37,9 @@ const CONFIG_INICIAL = {
     repetirFallos: true,
     minEspera: 2,
     maxEspera: 4
+  },
+  tarjetas: {
+    leerAlAparecer: false // ¿se lee la palabra en voz alta al aparecer cada tarjeta?
   }
 };
 let config = cargarConfig();
@@ -123,7 +127,7 @@ function anotarResultado(tipo, pos, estado) {
 // "grupo" puede ser "todo", "50", "100" (preguntas al azar) o el nombre de un tema.
 function verTest(grupo = "todo") {
   if (!datos.test.length) return vacio();
-  const { repetirFallos, minEspera, maxEspera } = config.test; // ajustes de la sección Configuración
+  const { repetirFallos, minEspera, maxEspera, ocultarRespuestas } = config.test; // ajustes de la sección Configuración
   const temas = listaDeTemas(datos.test);
   if (!["todo", "50", "100"].includes(grupo) && !temas.includes(grupo)) grupo = "todo";
   const delTema = (q) => q.tema || "Sin tema";
@@ -162,11 +166,16 @@ function verTest(grupo = "todo") {
       ${selector()}
       <p class="prog">${esRepaso ? "Repaso de una pregunta fallada" : `Pregunta ${vistas.size + 1} de ${total}`}</p>
       <h2>${esc(p.pregunta)}</h2>
-      <div class="opciones">${opciones.map((o) => `<button class="op">${esc(o)}</button>`).join("")}</div>
+      ${ocultarRespuestas ? `<button id="ver">Mostrar respuestas</button>` : ""}
+      <div class="opciones" ${ocultarRespuestas ? "hidden" : ""}>${opciones.map((o) => `<button class="op">${esc(o)}</button>`).join("")}</div>
       <p id="fb" class="fb"></p>
       <button id="sig" hidden>Siguiente</button>`;
 
     conectarGrupo();
+    if (ocultarRespuestas) { // primero solo la pregunta; el botón revela las respuestas
+      $("#ver").onclick = () => { $("#ver").hidden = true; $(".opciones").hidden = false; };
+      $("#ver").focus();
+    }
     app.querySelectorAll(".op").forEach((boton) => {
       boton.onclick = () => {
         const acierto = boton.textContent === p.correcta;
@@ -221,8 +230,12 @@ function verTarjetas(tema = "todo") { // "todo" = repasar todas las tarjetas
   const lista = mezclar(datos.tarjetas.filter((t) => tema === "todo" || delTema(t) === tema));
   let i = 0, girada = false;
 
-  function mostrar() {
+  function mostrar(leer) { // leer = true cuando se llega a una tarjeta nueva (no al girarla)
     const t = lista[i];
+    // Texto del lado que se está viendo, sin aclaraciones como "(animal)"
+    const visible = (girada ? t.reverso : t.anverso).replace(/\s*\(.*\)\s*$/, "");
+    // El botón de voz solo se activa si ese lado es solo japonés (hiragana, katakana o kanji)
+    const sonido = "speechSynthesis" in window && /^[\u3040-\u30ff\u4e00-\u9fff\s、。]+$/.test(visible);
     const opciones = temas.map((nombre) => {
       const cuantas = datos.tarjetas.filter((x) => delTema(x) === nombre).length;
       return `<option value="${esc(nombre)}" ${nombre === tema ? "selected" : ""}>${esc(nombre)} (${cuantas})</option>`;
@@ -232,14 +245,22 @@ function verTarjetas(tema = "todo") { // "todo" = repasar todas las tarjetas
         <option value="todo" ${tema === "todo" ? "selected" : ""}>Todo (${datos.tarjetas.length})</option>${opciones}</select>
       <p class="prog">Tarjeta ${i + 1} de ${lista.length} · toca la tarjeta para girarla</p>
       <button class="tarjeta ${girada ? "reverso" : ""}">${esc(girada ? t.reverso : t.anverso)}</button>
-      <div class="fila"><button id="ant">← Anterior</button><button id="sig">Siguiente →</button></div>`;
+      <div class="fila">
+        <button id="ant">← Anterior</button>
+        <button id="oir" aria-label="Escuchar la palabra" title="Escuchar la palabra" ${sonido ? "" : 'style="visibility:hidden"'}>🔊</button>
+        <button id="sig">Siguiente →</button></div>`;
     $("#tema").onchange = (e) => verTarjetas(e.target.value); // cambia de tema y vuelve a barajar
     $(".tarjeta").onclick = () => { girada = !girada; mostrar(); }; // clic = girar
+    // El botón 🔊 está fuera de la tarjeta (un botón dentro de otro no es válido en HTML).
+    // Si el lado visible no es japonés, el botón sigue ahí pero invisible, para que nada se mueva.
+    $("#oir").onclick = () => hablar(visible, false);
     // El operador % hace que al llegar al final vuelva al principio
-    $("#ant").onclick = () => { i = (i - 1 + lista.length) % lista.length; girada = false; mostrar(); };
-    $("#sig").onclick = () => { i = (i + 1) % lista.length; girada = false; mostrar(); };
+    $("#ant").onclick = () => { i = (i - 1 + lista.length) % lista.length; girada = false; mostrar(true); };
+    $("#sig").onclick = () => { i = (i + 1) % lista.length; girada = false; mostrar(true); };
+    // Si está activado en Configuración, la palabra se lee sola al aparecer la tarjeta
+    if (leer && sonido && config.tarjetas.leerAlAparecer) hablar(visible, false);
   }
-  mostrar();
+  mostrar(true);
 }
 
 // ================= 5. TIPO 3: UNIR RESPUESTAS =================
@@ -573,11 +594,11 @@ function verCanciones(n = 0) {
 // y añade aquí su control.
 function verConfiguracion() {
   // Bloque con los ajustes de repetición de un ejercicio. "clave" es el nombre en config.
-  const bloque = (clave, titulo, singular, plural) => {
+  const bloque = (clave, titulo, singular, plural, extra = "") => {
     const c = config[clave];
     const desactivado = c.repetirFallos ? "" : "disabled";
     return `<fieldset>
-      <legend>${titulo}</legend>
+      <legend>${titulo}</legend>${extra}
       <label class="ajuste"><span>Repetir las ${plural} que falle</span>
         <input type="checkbox" id="${clave}-repetir" ${c.repetirFallos ? "checked" : ""}></label>
       <label class="ajuste"><span>Mínimo de ${plural} de espera</span>
@@ -589,10 +610,19 @@ function verConfiguracion() {
     </fieldset>`;
   };
 
+  // Ajuste solo del test: ocultar las respuestas hasta pulsar un botón
+  const extraTest = `<label class="ajuste"><span>Mostrar primero solo la pregunta (las respuestas aparecen al pulsar un botón)</span>
+    <input type="checkbox" id="test-ocultar" ${config.test.ocultarRespuestas ? "checked" : ""}></label>`;
+
   app.innerHTML = `
     <h2>Configuración</h2>
-    ${bloque("test", "Test: preguntas falladas", "pregunta", "preguntas")}
-    ${bloque("dictado", "Dictado: palabras falladas", "palabra", "palabras")}
+    ${bloque("test", "Test", "pregunta", "preguntas", extraTest)}
+    ${bloque("dictado", "Dictado", "palabra", "palabras")}
+    <fieldset>
+      <legend>Tarjetas</legend>
+      <label class="ajuste"><span>Leer la palabra en voz alta al aparecer cada tarjeta</span>
+        <input type="checkbox" id="tarjetas-leer" ${config.tarjetas.leerAlAparecer ? "checked" : ""}></label>
+    </fieldset>
     <div class="fila"><button id="restaurar">Restaurar valores iniciales</button><span id="msg" class="fb"></span></div>`;
 
   // Conecta los tres campos de un bloque con su parte de config
@@ -616,7 +646,17 @@ function verConfiguracion() {
     [repetir, min, max].forEach((campo) => { campo.onchange = () => aplicar(campo); });
   }
   conectar("test");
+  $("#test-ocultar").onchange = (e) => {
+    config.test.ocultarRespuestas = e.target.checked;
+    guardarConfig();
+    $("#msg").textContent = "Guardado ✓";
+  };
   conectar("dictado");
+  $("#tarjetas-leer").onchange = (e) => {
+    config.tarjetas.leerAlAparecer = e.target.checked;
+    guardarConfig();
+    $("#msg").textContent = "Guardado ✓";
+  };
   $("#restaurar").onclick = () => { config = structuredClone(CONFIG_INICIAL); guardarConfig(); verConfiguracion(); };
 }
 
@@ -628,7 +668,14 @@ document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {
     document.querySelectorAll("nav button").forEach((x) => x.classList.remove("activo"));
     b.classList.add("activo");
-    secciones[b.dataset.sec](); // ejecuta la función de la sección pulsada
+    try {
+      secciones[b.dataset.sec](); // ejecuta la función de la sección pulsada
+    } catch (e) {
+      // Si algo falla, lo mostramos en pantalla (y en la consola, con F12) en lugar de no hacer nada
+      console.error(e);
+      app.innerHTML = `<p class="aviso">No se ha podido abrir esta sección: ${esc(e.message)}.<br>
+        Comprueba que todos los archivos están actualizados y recarga la página con Ctrl+F5.</p>`;
+    }
   };
 });
 
