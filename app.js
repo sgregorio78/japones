@@ -1,6 +1,6 @@
-/* JavaScript = la LÓGICA. Este archivo tiene 10 partes:
-   1. Datos y configuración   2. Utilidades   3-6. Los 4 tipos de ejercicio
-   7. Dictado   8. Canciones   9. Configuración   10. Arranque */
+/* JavaScript = la LÓGICA. Este archivo tiene 11 partes:
+   1. Datos y configuración   2. Utilidades   3-6. Los 4 primeros tipos de ejercicio
+   7. Ordenar   8. Dictado   9. Canciones   10. Configuración   11. Arranque */
 "use strict"; // modo estricto: avisa de errores tontos
 
 // ================= 1. DATOS =================
@@ -25,7 +25,7 @@ datos.tarjetas.forEach((t) => { if (!t.tema) t.tema = temaDe(t); });
 
 // ----- Configuración -----
 // Valores iniciales. Para añadir un ajuste nuevo: ponlo aquí, úsalo donde haga falta
-// y añade su control en la sección 9 (verConfiguracion).
+// y añade su control en la sección 10 (verConfiguracion).
 const CONFIG_INICIAL = {
   test: {
     ocultarRespuestas: false, // ¿se ve solo la pregunta hasta pulsar "Mostrar respuestas"?
@@ -450,7 +450,73 @@ function verHuecos(pos = 0) {
   $("#reint").onclick = () => verHuecos(pos);
 }
 
-// ================= 7. DICTADO (escribe lo que oyes) =================
+// ================= 7. ORDENAR (forma la frase en japonés con palabras sueltas) =================
+// Cada ejercicio da una frase en español y un montón de palabras: las correctas más
+// "intrusos" (palabras del mismo tipo que no hay que usar). Usa la misma sesión de práctica
+// que unir y huecos: orden aleatorio, botones anterior/siguiente y marcas ✅ / ❌.
+function verOrdenar(pos = 0) {
+  if (!datos.ordenar.length) return vacio();
+  const ej = datos.ordenar[sesion.ordenar.orden[pos]];
+  // Mezclamos correctas e intrusos en un solo grupo. Cada ficha recibe un id (su posición),
+  // para distinguir fichas con el mismo texto y recordar cuáles se han elegido.
+  const fichas = mezclar([...ej.frase, ...ej.intrusos].map((texto) => ({ texto })));
+  fichas.forEach((f, id) => { f.id = id; });
+
+  let elegidas = [];      // ids de las fichas elegidas, en el orden en que las elegiste
+  let bloqueado = false;  // true después de comprobar
+  let comprobado = false; // solo cuenta la primera comprobación de cada intento
+
+  app.innerHTML = `
+    ${barraHtml("ordenar", (e) => e.es, pos)}
+    <h2>${esc(ej.es)}</h2>
+    <p class="aviso">Forma la frase en japonés. Sobran algunas palabras.</p>
+    <div class="banco" id="banco"></div>
+    <div class="frase-armada" id="armada" aria-live="polite"></div>
+    <div class="fila"><button id="comp">Comprobar</button><button id="reiniciar">Empezar de nuevo</button></div>
+    <p id="fb" class="fb"></p>`;
+  conectarBarra("ordenar", pos, verOrdenar);
+
+  const ficha = (f) => `<button class="ficha" data-id="${f.id}">${esc(f.texto)}</button>`;
+  // Dibuja las fichas que quedan en el banco y las que forman la frase
+  function pintar() {
+    $("#banco").innerHTML = fichas.filter((f) => !elegidas.includes(f.id)).map(ficha).join("");
+    $("#armada").innerHTML = elegidas.map((id) => ficha(fichas[id])).join("");
+    app.querySelectorAll(".ficha").forEach((b) => {
+      b.disabled = bloqueado;
+      b.onclick = () => {
+        const id = Number(b.dataset.id);
+        // Una ficha del banco pasa a la frase; una ficha de la frase vuelve al banco
+        elegidas = elegidas.includes(id) ? elegidas.filter((x) => x !== id) : [...elegidas, id];
+        pintar();
+      };
+    });
+  }
+
+  $("#comp").onclick = () => {
+    if (bloqueado || !elegidas.length) return;
+    bloqueado = true;
+    // Se compara el texto completo: las palabras elegidas unidas contra la frase correcta
+    const acierto = elegidas.map((id) => fichas[id].texto).join("") === ej.frase.join("");
+    $("#armada").classList.add(acierto ? "ok" : "mal");
+    $("#fb").textContent = acierto ? "¡Correcto!" : `Incorrecto. La frase era: ${ej.frase.join("")}`;
+    if (!comprobado) {
+      comprobado = true;
+      anotarResultado("ordenar", pos, acierto ? "ok" : "mal");
+    }
+    $("#comp").hidden = true;
+    pintar(); // vuelve a dibujar para bloquear las fichas
+  };
+  $("#reiniciar").onclick = () => { // vuelve a empezar este mismo ejercicio
+    elegidas = []; bloqueado = false; comprobado = false;
+    $("#armada").classList.remove("ok", "mal");
+    $("#fb").textContent = "";
+    $("#comp").hidden = false;
+    pintar();
+  };
+  pintar();
+}
+
+// ================= 8. DICTADO (escribe lo que oyes) =================
 // Usa la síntesis de voz del navegador (Web Speech API): speechSynthesis lee un texto en voz alta.
 // No hace falta instalar nada ni conectarse a ningún servicio. La voz japonesa depende de tu dispositivo.
 function hablar(texto, lento) {
@@ -551,7 +617,7 @@ function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el n
   mostrar();
 }
 
-// ================= 8. CANCIONES (no es un ejercicio: es una sección de lectura) =================
+// ================= 9. CANCIONES (no es un ejercicio: es una sección de lectura) =================
 // Las letras están en canciones.js (la lista CANCIONES). Cada verso se muestra en japonés
 // y, al tocarlo, aparece su traducción debajo.
 function verCanciones(n = 0) {
@@ -588,7 +654,7 @@ function verCanciones(n = 0) {
   };
 }
 
-// ================= 9. CONFIGURACIÓN =================
+// ================= 10. CONFIGURACIÓN =================
 // Cada cambio se guarda al momento (no hay botón "Guardar").
 // Para un ajuste nuevo: añádelo a CONFIG_INICIAL (sección 1), úsalo donde haga falta
 // y añade aquí su control.
@@ -660,9 +726,10 @@ function verConfiguracion() {
   $("#restaurar").onclick = () => { config = structuredClone(CONFIG_INICIAL); guardarConfig(); verConfiguracion(); };
 }
 
-// ================= 10. ARRANQUE Y MENÚ =================
+// ================= 11. ARRANQUE Y MENÚ =================
 const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
-  huecos: () => { nuevaSesion("huecos"); verHuecos(0); }, dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
+  huecos: () => { nuevaSesion("huecos"); verHuecos(0); },
+  ordenar: () => { nuevaSesion("ordenar"); verOrdenar(0); }, dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {

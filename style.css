@@ -132,6 +132,14 @@ legend { font-weight: 600; padding: 0 6px; }
 .ajuste input[type="checkbox"] { width: 1.4em; height: 1.4em; }
 .ajuste input:disabled { opacity: .5; }
 
+/* Ordenar: fichas de palabras y la frase que se va formando */
+.ficha { font-size: 1.4rem; padding: 6px 14px; }
+.frase-armada {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-height: 66px; margin: 12px 0;
+  padding: 10px; background: var(--papel); border-bottom: 3px solid var(--tinta); border-radius: 8px 8px 0 0;
+}
+.frase-armada:empty::before { content: "Toca las palabras en orden para formar la frase"; color: var(--suave); font-size: .95rem; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 /* Hace que el atributo hidden oculte siempre el elemento, aunque tenga display propio (grid, flex...) */
