@@ -40,6 +40,9 @@ const CONFIG_INICIAL = {
   },
   tarjetas: {
     leerAlAparecer: false // ¿se lee la palabra en voz alta al aparecer cada tarjeta?
+  },
+  ordenarAleatorio: {
+    cantidad: 15          // cuántas frases se generan cada vez que se abre la pestaña
   }
 };
 let config = cargarConfig();
@@ -454,9 +457,10 @@ function verHuecos(pos = 0) {
 // Cada ejercicio da una frase en español y un montón de palabras: las correctas más
 // "intrusos" (palabras del mismo tipo que no hay que usar). Usa la misma sesión de práctica
 // que unir y huecos: orden aleatorio, botones anterior/siguiente y marcas ✅ / ❌.
-function verOrdenar(pos = 0) {
-  if (!datos.ordenar.length) return vacio();
-  const ej = datos.ordenar[sesion.ordenar.orden[pos]];
+// "tipo" es "ordenar" (frases de ejemplos.js) o "ordenarAleatorio" (frases generadas por generador.js)
+function verOrdenar(pos = 0, tipo = "ordenar") {
+  if (!datos[tipo].length) return vacio();
+  const ej = datos[tipo][sesion[tipo].orden[pos]];
   // Mezclamos correctas e intrusos en un solo grupo. Cada ficha recibe un id (su posición),
   // para distinguir fichas con el mismo texto y recordar cuáles se han elegido.
   const fichas = mezclar([...ej.frase, ...ej.intrusos].map((texto) => ({ texto })));
@@ -467,14 +471,14 @@ function verOrdenar(pos = 0) {
   let comprobado = false; // solo cuenta la primera comprobación de cada intento
 
   app.innerHTML = `
-    ${barraHtml("ordenar", (e) => e.es, pos)}
+    ${barraHtml(tipo, (e) => e.es, pos)}
     <h2>${esc(ej.es)}</h2>
     <p class="aviso">Forma la frase en japonés. Sobran algunas palabras.</p>
     <div class="banco" id="banco"></div>
     <div class="frase-armada" id="armada" aria-live="polite"></div>
     <div class="fila"><button id="comp">Comprobar</button><button id="reiniciar">Empezar de nuevo</button></div>
     <p id="fb" class="fb"></p>`;
-  conectarBarra("ordenar", pos, verOrdenar);
+  conectarBarra(tipo, pos, (p) => verOrdenar(p, tipo));
 
   const ficha = (f) => `<button class="ficha" data-id="${f.id}">${esc(f.texto)}</button>`;
   // Dibuja las fichas que quedan en el banco y las que forman la frase
@@ -496,12 +500,14 @@ function verOrdenar(pos = 0) {
     if (bloqueado || !elegidas.length) return;
     bloqueado = true;
     // Se compara el texto completo: las palabras elegidas unidas contra la frase correcta
-    const acierto = elegidas.map((id) => fichas[id].texto).join("") === ej.frase.join("");
+    // Vale la frase principal o cualquiera de las "otras" (por ejemplo, con el orden de dos palabras cambiado)
+    const dicho = elegidas.map((id) => fichas[id].texto).join("");
+    const acierto = [ej.frase, ...(ej.otras || [])].some((f) => f.join("") === dicho);
     $("#armada").classList.add(acierto ? "ok" : "mal");
     $("#fb").textContent = acierto ? "¡Correcto!" : `Incorrecto. La frase era: ${ej.frase.join("")}`;
     if (!comprobado) {
       comprobado = true;
-      anotarResultado("ordenar", pos, acierto ? "ok" : "mal");
+      anotarResultado(tipo, pos, acierto ? "ok" : "mal");
     }
     $("#comp").hidden = true;
     pintar(); // vuelve a dibujar para bloquear las fichas
@@ -689,6 +695,11 @@ function verConfiguracion() {
       <label class="ajuste"><span>Leer la palabra en voz alta al aparecer cada tarjeta</span>
         <input type="checkbox" id="tarjetas-leer" ${config.tarjetas.leerAlAparecer ? "checked" : ""}></label>
     </fieldset>
+    <fieldset>
+      <legend>Ordenar aleatorio</legend>
+      <label class="ajuste"><span>Número de frases que se generan cada vez</span>
+        <input type="number" id="aleatorio-cantidad" min="1" max="100" value="${config.ordenarAleatorio.cantidad}"></label>
+    </fieldset>
     <div class="fila"><button id="restaurar">Restaurar valores iniciales</button><span id="msg" class="fb"></span></div>`;
 
   // Conecta los tres campos de un bloque con su parte de config
@@ -718,6 +729,14 @@ function verConfiguracion() {
     $("#msg").textContent = "Guardado ✓";
   };
   conectar("dictado");
+  $("#aleatorio-cantidad").onchange = (e) => {
+    const n = parseInt(e.target.value, 10);
+    // Se limita a 1-100; si no es un número válido, se conserva el valor anterior
+    config.ordenarAleatorio.cantidad = Number.isNaN(n) ? config.ordenarAleatorio.cantidad : Math.min(100, Math.max(1, n));
+    e.target.value = config.ordenarAleatorio.cantidad;
+    guardarConfig();
+    $("#msg").textContent = "Guardado ✓";
+  };
   $("#tarjetas-leer").onchange = (e) => {
     config.tarjetas.leerAlAparecer = e.target.checked;
     guardarConfig();
@@ -729,7 +748,13 @@ function verConfiguracion() {
 // ================= 11. ARRANQUE Y MENÚ =================
 const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
   huecos: () => { nuevaSesion("huecos"); verHuecos(0); },
-  ordenar: () => { nuevaSesion("ordenar"); verOrdenar(0); }, dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
+  ordenar: () => { nuevaSesion("ordenar"); verOrdenar(0); },
+  // Cada vez que se abre la pestaña se generan frases nuevas (generador.js)
+  ordenarAleatorio: () => {
+    datos.ordenarAleatorio = generarFrases(config.ordenarAleatorio.cantidad);
+    nuevaSesion("ordenarAleatorio");
+    verOrdenar(0, "ordenarAleatorio");
+  }, dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {
