@@ -11,7 +11,7 @@
   <!-- Enlazamos el archivo de estilos -->
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="sin-sesion">
   <header>
     <h1>日本語ノート</h1>
     <!-- Menú: cada botón tiene data-sec, que app.js usa para saber qué sección mostrar -->
@@ -26,12 +26,23 @@
       <button data-sec="canciones">Canciones</button>
       <button data-sec="configuracion">Configuración</button>
     </nav>
+    <!-- Usuario con la sesión iniciada; app.js lo muestra al entrar -->
+    <div class="usuario" id="usuario" hidden>
+      <span id="nombre-usuario"></span>
+      <button id="salir">Cambiar de usuario</button>
+    </div>
   </header>
 
   <!-- Aquí app.js "dibuja" el ejercicio actual -->
   <main id="app"></main>
+  <div id="aviso-global" role="status" hidden></div>
 
   <!-- "defer" = ejecutar el script cuando la página ya está cargada -->
+  <!-- Firebase (versión "compat", que funciona con scripts normales). Debe cargarse antes que app.js -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js" defer></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore-compat.js" defer></script>
+  <script src="firebase-config.js" defer></script>
   <script src="ejemplos.js" defer></script>
   <script src="canciones.js" defer></script>
   <script src="generador.js" defer></script>

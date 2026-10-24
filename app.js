@@ -1,6 +1,6 @@
 /* JavaScript = la LÓGICA. Este archivo tiene 11 partes:
    1. Datos y configuración   2. Utilidades   3-6. Los 4 primeros tipos de ejercicio
-   7. Ordenar   8. Dictado   9. Canciones   10. Configuración   11. Arranque */
+   7. Ordenar   8. Dictado   9. Canciones   10. Configuración   11. Arranque, usuarios y menú */
 "use strict"; // modo estricto: avisa de errores tontos
 
 // ================= 1. DATOS =================
@@ -60,6 +60,25 @@ function guardarConfig() {
   try { localStorage.setItem("japones-config", JSON.stringify(config)); } catch (e) { /* sin almacenamiento */ }
 }
 
+// ----- Progreso del usuario (se guarda en Firebase, ver la sección 11) -----
+// progreso = { unir: { clave: "ok" | "mal" }, huecos: {...}, ordenar: {...} }
+// Cada ejercicio se identifica por una clave sacada de su texto, no por su posición en la lista:
+// así, aunque edites ejemplos.js, los resultados ya guardados siguen en su sitio.
+let progreso = {};
+const claveDe = (texto) => { // convierte un texto en una clave corta (hash djb2)
+  let h = 5381;
+  for (const c of texto) h = ((h << 5) + h + c.codePointAt(0)) | 0;
+  return (h >>> 0).toString(36);
+};
+// Texto que identifica a cada ejercicio. El ordenar aleatorio no se guarda: sus frases cambian cada vez.
+function textoClave(tipo, e) {
+  return tipo === "unir" ? e.titulo : tipo === "huecos" ? e.frase : tipo === "ordenar" ? e.es : null;
+}
+function estadoGuardado(tipo, e) {
+  const texto = textoClave(tipo, e);
+  return texto && progreso[tipo] ? progreso[tipo][claveDe(texto)] : undefined;
+}
+
 // ================= 2. UTILIDADES =================
 const app = document.querySelector("#app");
 const $ = (selector) => app.querySelector(selector); // atajo para buscar dentro de #app
@@ -87,10 +106,12 @@ function vacio() {
 // ----- Sesión de práctica (para los ejercicios de unir y de huecos) -----
 // Al entrar en una sección se crea una "sesión": un orden aleatorio de los ejercicios y
 // una anotación de cuáles has terminado y cómo ("ok" = todo bien, "mal" = con fallos).
-// Vive solo en memoria: al cambiar de sección o recargar la página se empieza de cero.
+// Al crearla se cargan los resultados guardados del usuario; cada resultado nuevo se guarda en Firebase.
 const sesion = {};
 function nuevaSesion(tipo) {
-  sesion[tipo] = { orden: mezclar(datos[tipo].map((_, i) => i)), resultado: {} };
+  const resultado = {};
+  datos[tipo].forEach((e, i) => { const estado = estadoGuardado(tipo, e); if (estado) resultado[i] = estado; });
+  sesion[tipo] = { orden: mezclar(datos[tipo].map((_, i) => i)), resultado };
 }
 const MARCAS = { ok: "✅ ", mal: "❌ " };
 
@@ -119,6 +140,7 @@ function conectarBarra(tipo, pos, ver) {
 function anotarResultado(tipo, pos, estado) {
   const s = sesion[tipo];
   s.resultado[s.orden[pos]] = estado;
+  guardarResultado(tipo, datos[tipo][s.orden[pos]], estado); // se guarda en Firebase
   const opcion = $("#sel").options[pos];
   opcion.className = estado;
   opcion.textContent = MARCAS[estado] + opcion.dataset.nombre;
@@ -700,6 +722,11 @@ function verConfiguracion() {
       <label class="ajuste"><span>Número de frases que se generan cada vez</span>
         <input type="number" id="aleatorio-cantidad" min="1" max="100" value="${config.ordenarAleatorio.cantidad}"></label>
     </fieldset>
+    <fieldset>
+      <legend>Mis datos</legend>
+      <p class="aviso">Usuario: ${esc(nombreUsuario())}. Se guardan los aciertos y fallos de Unir, Huecos y Ordenar.</p>
+      <button id="borrar-progreso">Borrar mis aciertos y fallos</button>
+    </fieldset>
     <div class="fila"><button id="restaurar">Restaurar valores iniciales</button><span id="msg" class="fb"></span></div>`;
 
   // Conecta los tres campos de un bloque con su parte de config
@@ -743,9 +770,132 @@ function verConfiguracion() {
     $("#msg").textContent = "Guardado ✓";
   };
   $("#restaurar").onclick = () => { config = structuredClone(CONFIG_INICIAL); guardarConfig(); verConfiguracion(); };
+  $("#borrar-progreso").onclick = async () => {
+    if (!confirm("Se borrarán todos tus aciertos y fallos guardados. ¿Seguro?")) return;
+    try { await borrarProgreso(); $("#msg").textContent = "Progreso borrado ✓"; }
+    catch (e) { console.error(e); $("#msg").textContent = "No se ha podido borrar el progreso."; }
+  };
 }
 
-// ================= 11. ARRANQUE Y MENÚ =================
+// ================= 11. ARRANQUE, USUARIOS (FIREBASE) Y MENÚ =================
+// Firebase Authentication gestiona el usuario y la contraseña, y Firestore guarda el progreso
+// en un documento por usuario: usuarios/{uid}. Los usuarios se crean a mano en la consola de Firebase.
+// Los datos de conexión están en firebase-config.js.
+let usuario = null;      // usuario con la sesión iniciada (null = nadie)
+let auth = null, db = null;
+
+const refUsuario = () => db.collection("usuarios").doc(usuario.uid);
+// "ana@japones.app" se muestra como "ana"
+const nombreUsuario = () => (usuario ? usuario.email.replace(DOMINIO_USUARIOS, "") : "");
+
+// Mensaje breve en la parte de abajo de la pantalla, que desaparece solo
+let temporizadorAviso;
+function avisar(texto) {
+  const caja = document.querySelector("#aviso-global");
+  caja.textContent = texto;
+  caja.hidden = false;
+  clearTimeout(temporizadorAviso);
+  temporizadorAviso = setTimeout(() => { caja.hidden = true; }, 5000);
+}
+
+// Guarda el resultado de un ejercicio. set(..., { merge: true }) solo toca esa clave:
+// el resto del progreso del documento se queda como estaba.
+function guardarResultado(tipo, ejercicio, estado) {
+  const texto = textoClave(tipo, ejercicio);
+  if (!texto || !usuario) return;
+  const clave = claveDe(texto);
+  if (!progreso[tipo]) progreso[tipo] = {};
+  progreso[tipo][clave] = estado;
+  refUsuario().set({ resultados: { [tipo]: { [clave]: estado } } }, { merge: true })
+    .catch((e) => { console.error(e); avisar("No se ha podido guardar el progreso en Firebase."); });
+}
+async function cargarProgreso() {
+  progreso = {};
+  try {
+    const doc = await refUsuario().get();
+    if (doc.exists) progreso = doc.data().resultados || {};
+  } catch (e) {
+    console.error(e);
+    avisar("No se ha podido cargar tu progreso: se empieza sin datos.");
+  }
+}
+async function borrarProgreso() {
+  await refUsuario().set({ resultados: {} }); // sin merge: sustituye el documento por uno vacío
+  progreso = {};
+  Object.keys(sesion).forEach((t) => { sesion[t].resultado = {}; });
+}
+
+const ERRORES_LOGIN = {
+  "auth/invalid-credential": "Usuario o contraseña incorrectos.",
+  "auth/wrong-password": "Usuario o contraseña incorrectos.",
+  "auth/user-not-found": "Usuario o contraseña incorrectos.",
+  "auth/invalid-email": "El nombre de usuario no es válido.",
+  "auth/user-disabled": "Este usuario está desactivado.",
+  "auth/too-many-requests": "Demasiados intentos. Espera un poco e inténtalo de nuevo.",
+  "auth/network-request-failed": "No hay conexión con Firebase."
+};
+const textoErrorLogin = (e) => ERRORES_LOGIN[e.code] || `No se ha podido entrar (${e.code || e.message}).`;
+
+function mostrarLogin() {
+  document.body.classList.add("sin-sesion"); // oculta el menú
+  document.querySelector("#usuario").hidden = true;
+  app.innerHTML = `<h2>Iniciar sesión</h2>
+    <form id="login" class="login">
+      <label>Usuario<input id="u" class="entrada" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
+      <label>Contraseña<input id="p" class="entrada" type="password" autocomplete="current-password" required></label>
+      <button>Entrar</button>
+      <p id="fb" class="fb"></p>
+    </form>`;
+  $("#u").focus();
+  $("#login").onsubmit = async (e) => {
+    e.preventDefault(); // evita que el navegador recargue la página
+    const nombre = $("#u").value.trim();
+    const email = nombre.includes("@") ? nombre : nombre + DOMINIO_USUARIOS;
+    $("#fb").textContent = "Entrando...";
+    try {
+      await auth.signInWithEmailAndPassword(email, $("#p").value);
+      // Si todo va bien, onAuthStateChanged (más abajo) muestra la aplicación
+    } catch (err) {
+      $("#fb").textContent = textoErrorLogin(err);
+    }
+  };
+}
+
+async function mostrarApp() {
+  await cargarProgreso();
+  document.body.classList.remove("sin-sesion");
+  document.querySelector("#nombre-usuario").textContent = "Usuario: " + nombreUsuario();
+  document.querySelector("#usuario").hidden = false;
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("activo", x.dataset.sec === "test"));
+  verTest(); // sección inicial
+}
+
+function iniciarFirebase() {
+  const aviso = (texto) => { app.innerHTML = `<p class="aviso">${esc(texto)}</p>`; };
+  if (typeof firebase === "undefined") {
+    return aviso("No se ha podido cargar Firebase. Comprueba tu conexión a internet y recarga la página.");
+  }
+  if (typeof firebaseConfig === "undefined" || String(firebaseConfig.apiKey).startsWith("PEGA")) {
+    return aviso("Falta configurar Firebase: abre firebase-config.js y pega los datos de tu proyecto.");
+  }
+  firebase.initializeApp(firebaseConfig);
+  auth = firebase.auth();
+  db = firebase.firestore();
+  // Firebase recuerda la sesión: al volver a abrir la app entras directamente.
+  // Esta función se ejecuta al cargar la página y cada vez que se entra o se sale.
+  auth.onAuthStateChanged((u) => {
+    usuario = u;
+    if (u) {
+      mostrarApp();
+    } else { // sin sesión: se olvida lo del usuario anterior y se pide el acceso
+      progreso = {};
+      Object.keys(sesion).forEach((t) => delete sesion[t]);
+      mostrarLogin();
+    }
+  });
+  document.querySelector("#salir").onclick = () => auth.signOut(); // "Cambiar de usuario"
+}
+
 const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSesion("unir"); verUnir(0); },
   huecos: () => { nuevaSesion("huecos"); verHuecos(0); },
   ordenar: () => { nuevaSesion("ordenar"); verOrdenar(0); },
@@ -771,4 +921,4 @@ document.querySelectorAll("nav button").forEach((b) => {
   };
 });
 
-verTest(); // sección inicial
+iniciarFirebase(); // comprueba si hay sesión y muestra el acceso o la aplicación
