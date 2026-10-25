@@ -237,15 +237,25 @@ const generarFrases = (() => {
   }
 
   const PLANTILLAS = [fecha, profesion, demostrativo, existencia, negativa, contador, enumeracion, comida, precio];
+  // Grupos de plantillas para elegir el tipo de frase en la pestaña
+  const CATEGORIAS = {
+    aleatorio: PLANTILLAS,                        // todas mezcladas
+    numeros: [precio, contador],                  // precios y "cuántas cosas / personas / animales hay"
+    basica: [fecha, profesion, demostrativo],     // A es B
+    existencia: [existencia, negativa],           // hay / no hay (います y あります)
+    enumeraciones: [enumeracion, comida]          // A y B (と, や)
+  };
 
   // ---------- Lo único que se "publica" ----------
-  return function generarFrases(cantidad) {
+  // categoria: "aleatorio", "numeros", "basica", "existencia" o "enumeraciones"
+  return function generarFrases(cantidad, categoria = "aleatorio") {
+    const plantillas = CATEGORIAS[categoria] || PLANTILLAS; // si no existe, se usan todas
     const lista = [], vistas = new Set();
     let intentos = 0;
     // Se descartan las frases repetidas; el límite de intentos evita un bucle infinito
     while (lista.length < cantidad && intentos < cantidad * 40) {
       intentos++;
-      const ejercicio = azar(PLANTILLAS)();
+      const ejercicio = azar(plantillas)();
       if (vistas.has(ejercicio.es)) continue;
       vistas.add(ejercicio.es);
       lista.push(ejercicio);

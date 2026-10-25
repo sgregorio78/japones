@@ -36,6 +36,7 @@
   <!-- Aquí app.js "dibuja" el ejercicio actual -->
   <main id="app"></main>
   <div id="aviso-global" role="status" hidden></div>
+  <div id="estado-red" role="status" hidden></div>
 
   <!-- "defer" = ejecutar el script cuando la página ya está cargada -->
   <!-- Firebase (versión "compat", que funciona con scripts normales). Debe cargarse antes que app.js -->
@@ -47,5 +48,11 @@
   <script src="canciones.js" defer></script>
   <script src="generador.js" defer></script>
   <script src="app.js" defer></script>
+  <script>
+    // Service worker (sw.js): guarda los archivos de la app para poder abrirla sin conexión
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    }
+  </script>
 </body>
 </html>

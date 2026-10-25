@@ -42,7 +42,8 @@ const CONFIG_INICIAL = {
     leerAlAparecer: false // ¿se lee la palabra en voz alta al aparecer cada tarjeta?
   },
   ordenarAleatorio: {
-    cantidad: 15          // cuántas frases se generan cada vez que se abre la pestaña
+    cantidad: 15,         // cuántas frases se generan cada vez que se abre la pestaña
+    categoria: "aleatorio" // último tipo de frase elegido (aleatorio, numeros, basica, existencia, enumeraciones)
   }
 };
 let config = cargarConfig();
@@ -78,6 +79,10 @@ function estadoGuardado(tipo, e) {
   const texto = textoClave(tipo, e);
   return texto && progreso[tipo] ? progreso[tipo][claveDe(texto)] : undefined;
 }
+// Tarjetas marcadas con ★ para repasarlas. También se guardan en Firebase: { clave: true | false }
+let marcadas = {};
+const claveTarjeta = (t) => claveDe(t.anverso + "|" + t.reverso);
+const estaMarcada = (t) => marcadas[claveTarjeta(t)] === true;
 
 // ================= 2. UTILIDADES =================
 const app = document.querySelector("#app");
@@ -247,38 +252,60 @@ function listaDeTemas(items) {
   return temas;
 }
 
-function verTarjetas(tema = "todo") { // "todo" = repasar todas las tarjetas
+function verTarjetas(tema = "todo") { // "todo", "marcadas" (las que tienen ★) o el nombre de un tema
   if (!datos.tarjetas.length) return vacio();
   const temas = listaDeTemas(datos.tarjetas);
-  if (tema !== "todo" && !temas.includes(tema)) tema = "todo";
+  // Las marcas se guardan en Firebase: sin usuario o sin conexión no hay marcas ni grupo "Para repasar"
+  const hayMarcas = puedeGuardar();
+  if (tema === "marcadas" && !hayMarcas) tema = "todo";
+  if (tema !== "todo" && tema !== "marcadas" && !temas.includes(tema)) tema = "todo";
   const delTema = (t) => (t.tema || "Sin tema");
-  const lista = mezclar(datos.tarjetas.filter((t) => tema === "todo" || delTema(t) === tema));
+  const elegida = (t) => tema === "todo" || (tema === "marcadas" ? estaMarcada(t) : delTema(t) === tema);
+  const lista = mezclar(datos.tarjetas.filter(elegida));
   let i = 0, girada = false;
 
-  function mostrar(leer) { // leer = true cuando se llega a una tarjeta nueva (no al girarla)
-    const t = lista[i];
-    // Texto del lado que se está viendo, sin aclaraciones como "(animal)"
-    const visible = (girada ? t.reverso : t.anverso).replace(/\s*\(.*\)\s*$/, "");
-    // El botón de voz solo se activa si ese lado es solo japonés (hiragana, katakana o kanji)
-    const sonido = "speechSynthesis" in window && /^[\u3040-\u30ff\u4e00-\u9fff\s、。]+$/.test(visible);
+  // Desplegable de grupos: se calcula cada vez para que el contador de marcadas esté al día
+  const selector = () => {
     const opciones = temas.map((nombre) => {
       const cuantas = datos.tarjetas.filter((x) => delTema(x) === nombre).length;
       return `<option value="${esc(nombre)}" ${nombre === tema ? "selected" : ""}>${esc(nombre)} (${cuantas})</option>`;
     }).join("");
+    const nMarcadas = datos.tarjetas.filter(estaMarcada).length;
+    return `<select id="tema" aria-label="Tema de las tarjetas">
+      <option value="todo" ${tema === "todo" ? "selected" : ""}>Todo (${datos.tarjetas.length})</option>
+      ${hayMarcas ? `<option value="marcadas" ${tema === "marcadas" ? "selected" : ""}>★ Para repasar (${nMarcadas})</option>` : ""}
+      ${opciones}</select>`;
+  };
+  if (!lista.length) { // por ejemplo, "Para repasar" cuando todavía no has marcado ninguna
+    app.innerHTML = `${selector()}<p class="aviso">No hay tarjetas marcadas. Marca con ☆ las que quieras repasar y aparecerán aquí.</p>`;
+    $("#tema").onchange = (e) => verTarjetas(e.target.value);
+    return;
+  }
+
+  function mostrar(leer) { // leer = true cuando se llega a una tarjeta nueva (no al girarla)
+    const t = lista[i];
+    const marcada = estaMarcada(t);
+    // Texto del lado que se está viendo, sin aclaraciones como "(animal)"
+    const visible = (girada ? t.reverso : t.anverso).replace(/\s*\(.*\)\s*$/, "");
+    // El botón de voz solo se activa si ese lado es solo japonés (hiragana, katakana o kanji)
+    const sonido = "speechSynthesis" in window && /^[\u3040-\u30ff\u4e00-\u9fff\s、。]+$/.test(visible);
     app.innerHTML = `
-      <select id="tema" aria-label="Tema de las tarjetas">
-        <option value="todo" ${tema === "todo" ? "selected" : ""}>Todo (${datos.tarjetas.length})</option>${opciones}</select>
+      ${selector()}
       <p class="prog">Tarjeta ${i + 1} de ${lista.length} · toca la tarjeta para girarla</p>
       <button class="tarjeta ${girada ? "reverso" : ""}">${esc(girada ? t.reverso : t.anverso)}</button>
       <div class="fila">
         <button id="ant">← Anterior</button>
         <button id="oir" aria-label="Escuchar la palabra" title="Escuchar la palabra" ${sonido ? "" : 'style="visibility:hidden"'}>🔊</button>
+        <button id="marca" aria-label="${marcada ? "Quitar de las tarjetas para repasar" : "Marcar para repasar"}"
+          title="${marcada ? "Quitar de las tarjetas para repasar" : "Marcar para repasar"}" ${hayMarcas ? "" : "hidden"}>${marcada ? "★" : "☆"}</button>
         <button id="sig">Siguiente →</button></div>`;
-    $("#tema").onchange = (e) => verTarjetas(e.target.value); // cambia de tema y vuelve a barajar
+    $("#tema").onchange = (e) => verTarjetas(e.target.value); // cambia de grupo y vuelve a barajar
     $(".tarjeta").onclick = () => { girada = !girada; mostrar(); }; // clic = girar
     // El botón 🔊 está fuera de la tarjeta (un botón dentro de otro no es válido en HTML).
     // Si el lado visible no es japonés, el botón sigue ahí pero invisible, para que nada se mueva.
     $("#oir").onclick = () => hablar(visible, false);
+    // ★ marca o desmarca la tarjeta (se guarda en Firebase) y se vuelve a dibujar la misma tarjeta
+    $("#marca").onclick = () => { marcarTarjeta(t, !marcada); mostrar(); };
     // El operador % hace que al llegar al final vuelva al principio
     $("#ant").onclick = () => { i = (i - 1 + lista.length) % lista.length; girada = false; mostrar(true); };
     $("#sig").onclick = () => { i = (i + 1) % lista.length; girada = false; mostrar(true); };
@@ -479,6 +506,22 @@ function verHuecos(pos = 0) {
 // Cada ejercicio da una frase en español y un montón de palabras: las correctas más
 // "intrusos" (palabras del mismo tipo que no hay que usar). Usa la misma sesión de práctica
 // que unir y huecos: orden aleatorio, botones anterior/siguiente y marcas ✅ / ❌.
+// Tipos de frase del ordenar aleatorio: [valor, texto]. El valor es el nombre de la categoría en generador.js
+const CATEGORIAS_ALEATORIO = [
+  ["aleatorio", "Aleatorio (todo mezclado)"], ["numeros", "Números (precios, cuántos hay)"],
+  ["basica", "Estructura básica"], ["existencia", "Frases con aru / iru"], ["enumeraciones", "Frases con enumeraciones"]
+];
+const selectorCategoria = () => `<select id="categoria" aria-label="Tipo de frase">${CATEGORIAS_ALEATORIO.map(([valor, texto]) =>
+  `<option value="${valor}" ${valor === config.ordenarAleatorio.categoria ? "selected" : ""}>${texto}</option>`).join("")}</select>`;
+// Genera frases nuevas del tipo elegido y empieza. Se llama al abrir la pestaña y al cambiar el tipo.
+function abrirOrdenarAleatorio(categoria = config.ordenarAleatorio.categoria) {
+  config.ordenarAleatorio.categoria = categoria;
+  guardarConfig(); // se recuerda el último tipo elegido
+  datos.ordenarAleatorio = generarFrases(config.ordenarAleatorio.cantidad, categoria);
+  nuevaSesion("ordenarAleatorio");
+  verOrdenar(0, "ordenarAleatorio");
+}
+
 // "tipo" es "ordenar" (frases de ejemplos.js) o "ordenarAleatorio" (frases generadas por generador.js)
 function verOrdenar(pos = 0, tipo = "ordenar") {
   if (!datos[tipo].length) return vacio();
@@ -493,6 +536,7 @@ function verOrdenar(pos = 0, tipo = "ordenar") {
   let comprobado = false; // solo cuenta la primera comprobación de cada intento
 
   app.innerHTML = `
+    ${tipo === "ordenarAleatorio" ? selectorCategoria() : ""}
     ${barraHtml(tipo, (e) => e.es, pos)}
     <h2>${esc(ej.es)}</h2>
     <p class="aviso">Forma la frase en japonés. Sobran algunas palabras.</p>
@@ -501,6 +545,7 @@ function verOrdenar(pos = 0, tipo = "ordenar") {
     <div class="fila"><button id="comp">Comprobar</button><button id="reiniciar">Empezar de nuevo</button></div>
     <p id="fb" class="fb"></p>`;
   conectarBarra(tipo, pos, (p) => verOrdenar(p, tipo));
+  if (tipo === "ordenarAleatorio") $("#categoria").onchange = (e) => abrirOrdenarAleatorio(e.target.value);
 
   const ficha = (f) => `<button class="ficha" data-id="${f.id}">${esc(f.texto)}</button>`;
   // Dibuja las fichas que quedan en el banco y las que forman la frase
@@ -724,8 +769,12 @@ function verConfiguracion() {
     </fieldset>
     <fieldset>
       <legend>Mis datos</legend>
-      <p class="aviso">Usuario: ${esc(nombreUsuario())}. Se guardan los aciertos y fallos de Unir, Huecos y Ordenar.</p>
-      <button id="borrar-progreso">Borrar mis aciertos y fallos</button>
+      <p class="aviso">${usuario ? `Usuario: ${esc(nombreUsuario())}. Se guardan los aciertos y fallos de Unir, Huecos y Ordenar, y las tarjetas marcadas.`
+        : "Sin conexión o sin usuario: no hay datos guardados."}</p>
+      <div class="fila">
+        <button id="borrar-progreso" ${puedeGuardar() ? "" : "disabled"}>Borrar mis aciertos y fallos</button>
+        <button id="borrar-marcas" ${puedeGuardar() ? "" : "disabled"}>Quitar mis marcas de tarjetas</button>
+      </div>
     </fieldset>
     <div class="fila"><button id="restaurar">Restaurar valores iniciales</button><span id="msg" class="fb"></span></div>`;
 
@@ -775,6 +824,11 @@ function verConfiguracion() {
     try { await borrarProgreso(); $("#msg").textContent = "Progreso borrado ✓"; }
     catch (e) { console.error(e); $("#msg").textContent = "No se ha podido borrar el progreso."; }
   };
+  $("#borrar-marcas").onclick = async () => {
+    if (!confirm("Se quitarán todas las marcas ★ de las tarjetas. ¿Seguro?")) return;
+    try { await borrarMarcas(); $("#msg").textContent = "Marcas quitadas ✓"; }
+    catch (e) { console.error(e); $("#msg").textContent = "No se han podido quitar las marcas."; }
+  };
 }
 
 // ================= 11. ARRANQUE, USUARIOS (FIREBASE) Y MENÚ =================
@@ -783,6 +837,24 @@ function verConfiguracion() {
 // Los datos de conexión están en firebase-config.js.
 let usuario = null;      // usuario con la sesión iniciada (null = nadie)
 let auth = null, db = null;
+let modoSinConexion = false; // true si la app se abrió sin conexión o con "Entrar sin conexión"
+
+// Solo se carga y se guarda si hay usuario y hay internet. Si no, la app funciona igual pero sin guardar.
+function puedeGuardar() { return !!usuario && navigator.onLine; }
+
+// Etiqueta fija arriba a la derecha que avisa de la falta de conexión
+function actualizarRed() {
+  const caja = document.querySelector("#estado-red");
+  if (!navigator.onLine) {
+    caja.textContent = "Sin conexión · no se guardan resultados";
+    caja.hidden = false;
+  } else if (modoSinConexion) {
+    caja.textContent = "Sin usuario · recarga la página para iniciar sesión";
+    caja.hidden = false;
+  } else {
+    caja.hidden = true;
+  }
+}
 
 const refUsuario = () => db.collection("usuarios").doc(usuario.uid);
 // "ana@japones.app" se muestra como "ana"
@@ -802,27 +874,48 @@ function avisar(texto) {
 // el resto del progreso del documento se queda como estaba.
 function guardarResultado(tipo, ejercicio, estado) {
   const texto = textoClave(tipo, ejercicio);
-  if (!texto || !usuario) return;
+  if (!texto || !puedeGuardar()) return;
   const clave = claveDe(texto);
   if (!progreso[tipo]) progreso[tipo] = {};
   progreso[tipo][clave] = estado;
   refUsuario().set({ resultados: { [tipo]: { [clave]: estado } } }, { merge: true })
     .catch((e) => { console.error(e); avisar("No se ha podido guardar el progreso en Firebase."); });
 }
+// Guarda o quita la marca ★ de una tarjeta
+function marcarTarjeta(t, valor) {
+  if (!puedeGuardar()) return;
+  const clave = claveTarjeta(t);
+  marcadas[clave] = valor;
+  refUsuario().set({ tarjetasMarcadas: { [clave]: valor } }, { merge: true })
+    .catch((e) => { console.error(e); avisar("No se ha podido guardar la marca de la tarjeta."); });
+}
 async function cargarProgreso() {
   progreso = {};
+  marcadas = {};
+  if (!puedeGuardar()) return; // sin conexión: no se carga nada
   try {
     const doc = await refUsuario().get();
-    if (doc.exists) progreso = doc.data().resultados || {};
+    if (doc.exists) {
+      const d = doc.data();
+      progreso = d.resultados || {};
+      marcadas = d.tarjetasMarcadas || {};
+    }
   } catch (e) {
     console.error(e);
     avisar("No se ha podido cargar tu progreso: se empieza sin datos.");
   }
 }
+// FieldValue.delete() borra ese campo del documento y deja intactos los demás (las marcas, por ejemplo)
 async function borrarProgreso() {
-  await refUsuario().set({ resultados: {} }); // sin merge: sustituye el documento por uno vacío
+  if (!puedeGuardar()) throw new Error("Sin conexión");
+  await refUsuario().set({ resultados: firebase.firestore.FieldValue.delete() }, { merge: true });
   progreso = {};
   Object.keys(sesion).forEach((t) => { sesion[t].resultado = {}; });
+}
+async function borrarMarcas() {
+  if (!puedeGuardar()) throw new Error("Sin conexión");
+  await refUsuario().set({ tarjetasMarcadas: firebase.firestore.FieldValue.delete() }, { merge: true });
+  marcadas = {};
 }
 
 const ERRORES_LOGIN = {
@@ -844,9 +937,11 @@ function mostrarLogin() {
       <label>Usuario<input id="u" class="entrada" autocomplete="username" autocapitalize="off" spellcheck="false" required></label>
       <label>Contraseña<input id="p" class="entrada" type="password" autocomplete="current-password" required></label>
       <button>Entrar</button>
+      <button type="button" id="sin-conexion" class="secundario">Entrar sin conexión</button>
       <p id="fb" class="fb"></p>
     </form>`;
   $("#u").focus();
+  $("#sin-conexion").onclick = entrarSinConexion; // usar la app sin usuario: no se carga ni se guarda nada
   $("#login").onsubmit = async (e) => {
     e.preventDefault(); // evita que el navegador recargue la página
     const nombre = $("#u").value.trim();
@@ -861,8 +956,25 @@ function mostrarLogin() {
   };
 }
 
+// Modo sin conexión: la app funciona igual, pero sin usuario y sin cargar ni guardar resultados
+function entrarSinConexion() {
+  modoSinConexion = true;
+  usuario = null; progreso = {}; marcadas = {};
+  Object.keys(sesion).forEach((t) => delete sesion[t]);
+  document.body.classList.remove("sin-sesion");
+  document.querySelector("#nombre-usuario").textContent = "Modo sin conexión";
+  document.querySelector("#salir").hidden = true; // no hay sesión que cerrar
+  document.querySelector("#usuario").hidden = false;
+  actualizarRed();
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("activo", x.dataset.sec === "test"));
+  verTest();
+}
+
 async function mostrarApp() {
+  modoSinConexion = false;
   await cargarProgreso();
+  actualizarRed();
+  document.querySelector("#salir").hidden = false;
   document.body.classList.remove("sin-sesion");
   document.querySelector("#nombre-usuario").textContent = "Usuario: " + nombreUsuario();
   document.querySelector("#usuario").hidden = false;
@@ -872,9 +984,12 @@ async function mostrarApp() {
 
 function iniciarFirebase() {
   const aviso = (texto) => { app.innerHTML = `<p class="aviso">${esc(texto)}</p>`; };
-  if (typeof firebase === "undefined") {
-    return aviso("No se ha podido cargar Firebase. Comprueba tu conexión a internet y recarga la página.");
-  }
+  // El aviso de "Sin conexión" se actualiza solo cuando el navegador detecta que se pierde o vuelve internet
+  window.addEventListener("online", actualizarRed);
+  window.addEventListener("offline", actualizarRed);
+  actualizarRed();
+  // Sin internet (o si Firebase no se ha podido cargar), la app se usa igual, sin usuario y sin guardar
+  if (typeof firebase === "undefined" || !navigator.onLine) return entrarSinConexion();
   if (typeof firebaseConfig === "undefined" || String(firebaseConfig.apiKey).startsWith("PEGA")) {
     return aviso("Falta configurar Firebase: abre firebase-config.js y pega los datos de tu proyecto.");
   }
@@ -888,7 +1003,7 @@ function iniciarFirebase() {
     if (u) {
       mostrarApp();
     } else { // sin sesión: se olvida lo del usuario anterior y se pide el acceso
-      progreso = {};
+      progreso = {}; marcadas = {};
       Object.keys(sesion).forEach((t) => delete sesion[t]);
       mostrarLogin();
     }
@@ -900,11 +1015,7 @@ const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSes
   huecos: () => { nuevaSesion("huecos"); verHuecos(0); },
   ordenar: () => { nuevaSesion("ordenar"); verOrdenar(0); },
   // Cada vez que se abre la pestaña se generan frases nuevas (generador.js)
-  ordenarAleatorio: () => {
-    datos.ordenarAleatorio = generarFrases(config.ordenarAleatorio.cantidad);
-    nuevaSesion("ordenarAleatorio");
-    verOrdenar(0, "ordenarAleatorio");
-  }, dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
+  ordenarAleatorio: () => abrirOrdenarAleatorio(), dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {

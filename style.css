@@ -64,7 +64,7 @@ button:disabled { cursor: default; }
 .tarjeta.reverso { --papel-t: #fff0b3; --linea-t: #ecd77f; --borde-t: #d4bd5e; --texto-t: #3d2f00; }
 @keyframes aparece { from { transform: perspective(700px) rotateX(-70deg); opacity: .4; } to { transform: none; opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .tarjeta { animation: none; } }
-.fila { display: flex; gap: 8px; align-items: center; }
+.fila { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* Unir: dos columnas */
 .columnas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
@@ -175,6 +175,13 @@ body.sin-sesion nav { display: none; } /* sin sesión no se ve el menú */
   header { display: flex; flex-direction: column; }
   .usuario { margin-top: auto; padding-top: 14px; }
 }
+
+/* Aviso de "Sin conexión" y botón secundario del acceso */
+#estado-red {
+  position: fixed; top: 10px; right: 10px; z-index: 30; padding: 4px 12px; border-radius: 999px;
+  background: #fff1b8; color: #4a3b00; border: 1px solid #d4bd5e; font-size: .8rem;
+}
+.login .secundario { background: transparent; color: var(--tinta); }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
