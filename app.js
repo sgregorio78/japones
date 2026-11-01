@@ -15,7 +15,8 @@ function temaDe(t) {
   const base = t.anverso.replace(/\s*\(.*\)\s*$/, ""); // quita "(animal)" y similares
   const candidatos = [];
   datos.unir.forEach((u) => u.pares.forEach((p) => {
-    if (p[0] === base) candidatos.push({ tema: u.titulo, es: p[1] });
+    // p = [japonés, español, kanji, otras formas válidas]
+    if (p[0] === base || (p[3] && p[3].includes(base))) candidatos.push({ tema: u.titulo, es: p[1] });
   }));
   const mejor = candidatos.find((c) => t.reverso.includes(c.es)) || candidatos[0];
   return mejor ? mejor.tema : "Sin tema";
@@ -606,8 +607,9 @@ const limpiar = (t) => t.normalize("NFKC").replace(/[\s、。,.!?！？・「」
 function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el nombre de un tema
   // Palabras de los ejercicios de unir, sin repetir
   const todas = [], yaEsta = new Set();
-  datos.unir.forEach((u) => u.pares.forEach(([jp, es]) => {
-    if (!yaEsta.has(jp)) { yaEsta.add(jp); todas.push({ jp, es, tema: u.titulo }); }
+  // Cada par es [japonés, español, kanji, otras formas válidas]; los dos últimos son opcionales
+  datos.unir.forEach((u) => u.pares.forEach(([jp, es, kanji, alt]) => {
+    if (!yaEsta.has(jp)) { yaEsta.add(jp); todas.push({ jp, es, tema: u.titulo, alt }); }
   }));
   if (!todas.length) return vacio();
   const { repetirFallos, minEspera, maxEspera } = config.dictado; // ajustes de la sección Configuración
@@ -659,7 +661,8 @@ function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el n
     function comprobar() {
       if (!limpiar(entrada.value)) return; // no hace nada si está vacío
       hecho = true;
-      const acierto = limpiar(entrada.value) === limpiar(p.jp);
+      // Vale la palabra principal o cualquiera de sus otras formas (por ejemplo "いい" y "よい")
+      const acierto = [p.jp, ...(p.alt || [])].some((f) => limpiar(f) === limpiar(entrada.value));
       if (!esRepaso) { vistas.add(p); if (acierto) puntos++; } // solo cuenta el primer intento
       entrada.readOnly = true;
       entrada.classList.add(acierto ? "ok" : "mal");
