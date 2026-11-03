@@ -1,6 +1,6 @@
-/* JavaScript = la LÓGICA. Este archivo tiene 11 partes:
+/* JavaScript = la LÓGICA. Este archivo tiene 12 partes:
    1. Datos y configuración   2. Utilidades   3-6. Los 4 primeros tipos de ejercicio
-   7. Ordenar   8. Dictado   9. Canciones   10. Configuración   11. Arranque, usuarios y menú */
+   7. Ordenar   8. Dibujos   9. Dictado   10. Canciones   11. Configuración   12. Arranque, usuarios y menú */
 "use strict"; // modo estricto: avisa de errores tontos
 
 // ================= 1. DATOS =================
@@ -26,7 +26,7 @@ datos.tarjetas.forEach((t) => { if (!t.tema) t.tema = temaDe(t); });
 
 // ----- Configuración -----
 // Valores iniciales. Para añadir un ajuste nuevo: ponlo aquí, úsalo donde haga falta
-// y añade su control en la sección 10 (verConfiguracion).
+// y añade su control en la sección 11 (verConfiguracion).
 const CONFIG_INICIAL = {
   test: {
     ocultarRespuestas: false, // ¿se ve solo la pregunta hasta pulsar "Mostrar respuestas"?
@@ -41,6 +41,13 @@ const CONFIG_INICIAL = {
   },
   tarjetas: {
     leerAlAparecer: false // ¿se lee la palabra en voz alta al aparecer cada tarjeta?
+  },
+  dibujos: {
+    tipo: "mezcla",       // último tipo elegido: mezcla, cuantos o donde
+    cantidad: 10,         // preguntas por ronda
+    repetirFallos: true,  // mismos ajustes de repetición que el test y el dictado
+    minEspera: 2,
+    maxEspera: 4
   },
   ordenarAleatorio: {
     cantidad: 15,         // cuántas frases se generan cada vez que se abre la pestaña
@@ -62,7 +69,7 @@ function guardarConfig() {
   try { localStorage.setItem("japones-config", JSON.stringify(config)); } catch (e) { /* sin almacenamiento */ }
 }
 
-// ----- Progreso del usuario (se guarda en Firebase, ver la sección 11) -----
+// ----- Progreso del usuario (se guarda en Firebase, ver la sección 12) -----
 // progreso = { unir: { clave: "ok" | "mal" }, huecos: {...}, ordenar: {...} }
 // Cada ejercicio se identifica por una clave sacada de su texto, no por su posición en la lista:
 // así, aunque edites ejemplos.js, los resultados ya guardados siguen en su sitio.
@@ -590,7 +597,66 @@ function verOrdenar(pos = 0, tipo = "ordenar") {
   pintar();
 }
 
-// ================= 8. DICTADO (escribe lo que oyes) =================
+// ================= 8. DIBUJOS (preguntas sobre dibujos que se generan al azar) =================
+// generador: dibujos.js. Cada vez que se abre la pestaña (o se cambia de tipo) se crean dibujos nuevos.
+// Funciona como el test: respuestas de elección múltiple y repetición de las falladas (según Configuración).
+const TIPOS_DIBUJO = [["mezcla", "Todo mezclado"], ["cuantos", "¿Cuántos hay?"], ["donde", "¿Dónde está?"]];
+function verDibujos(tipo = config.dibujos.tipo) {
+  if (!TIPOS_DIBUJO.some(([valor]) => valor === tipo)) tipo = "mezcla";
+  config.dibujos.tipo = tipo;
+  guardarConfig(); // se recuerda el último tipo elegido
+  const { cantidad, repetirFallos, minEspera, maxEspera } = config.dibujos;
+  const lista = generarDibujos(cantidad, tipo); // preguntas con su dibujo (svg)
+  const total = lista.length;
+  const vistas = new Set(); // preguntas ya contestadas al menos una vez
+  let i = 0, puntos = 0, repasos = 0;
+  const selector = () => `<select id="tipo-dibujo" aria-label="Tipo de ejercicio">${TIPOS_DIBUJO.map(([valor, texto]) =>
+    `<option value="${valor}" ${valor === tipo ? "selected" : ""}>${texto}</option>`).join("")}</select>`;
+
+  function mostrar() {
+    if (i >= lista.length) {
+      app.innerHTML = `${selector()}<h2>Resultado</h2><p class="grande">${puntos} / ${total}</p>
+        <p class="aviso">Aciertos a la primera.${repetirFallos ? ` Veces que se ha repetido una pregunta por fallarla: ${repasos}.` : ""}</p>
+        <button id="rep">Repetir con dibujos nuevos</button>`;
+      $("#tipo-dibujo").onchange = (e) => verDibujos(e.target.value);
+      $("#rep").onclick = () => verDibujos(tipo);
+      return;
+    }
+    const p = lista[i];
+    const esRepaso = vistas.has(p); // una pregunta repetida conserva su mismo dibujo
+    app.innerHTML = `
+      ${selector()}
+      <p class="prog">${esRepaso ? "Repaso de una pregunta fallada" : `Pregunta ${vistas.size + 1} de ${total}`}</p>
+      <div class="dibujo">${p.svg}</div>
+      <h2>${esc(p.pregunta)}</h2>
+      <div class="opciones">${mezclar([p.correcta, ...p.incorrectas]).map((o) => `<button class="op">${esc(o)}</button>`).join("")}</div>
+      <p id="fb" class="fb"></p>
+      <button id="sig" hidden>Siguiente</button>`;
+    $("#tipo-dibujo").onchange = (e) => verDibujos(e.target.value); // cambia de tipo y genera dibujos nuevos
+    app.querySelectorAll(".op").forEach((boton) => {
+      boton.onclick = () => {
+        const acierto = boton.textContent === p.correcta;
+        if (!esRepaso) { vistas.add(p); if (acierto) puntos++; } // la puntuación solo cuenta el primer intento
+        app.querySelectorAll(".op").forEach((b) => { b.disabled = true; if (b.textContent === p.correcta) b.classList.add("ok"); });
+        if (acierto) {
+          $("#fb").textContent = "¡Correcto!";
+        } else {
+          boton.classList.add("mal");
+          if (repetirFallos) { // vuelve a salir, con el mismo dibujo, tras un número de preguntas al azar
+            lista.splice(i + 1 + aleatorio(minEspera, maxEspera), 0, p);
+            repasos++;
+          }
+          $("#fb").textContent = `Incorrecto. Esta pregunta ${repetirFallos ? "se repetirá" : "no se repetirá"}.`;
+        }
+        $("#sig").hidden = false;
+      };
+    });
+    $("#sig").onclick = () => { i++; mostrar(); };
+  }
+  mostrar();
+}
+
+// ================= 9. DICTADO (escribe lo que oyes) =================
 // Usa la síntesis de voz del navegador (Web Speech API): speechSynthesis lee un texto en voz alta.
 // No hace falta instalar nada ni conectarse a ningún servicio. La voz japonesa depende de tu dispositivo.
 function hablar(texto, lento) {
@@ -693,7 +759,7 @@ function verDictado(grupo = "20") { // "20" = 20 palabras al azar, "todo" o el n
   mostrar();
 }
 
-// ================= 9. CANCIONES (no es un ejercicio: es una sección de lectura) =================
+// ================= 10. CANCIONES (no es un ejercicio: es una sección de lectura) =================
 // Las letras están en canciones.js (la lista CANCIONES). Cada verso se muestra en japonés
 // y, al tocarlo, aparece su traducción debajo.
 function verCanciones(n = 0) {
@@ -730,7 +796,7 @@ function verCanciones(n = 0) {
   };
 }
 
-// ================= 10. CONFIGURACIÓN =================
+// ================= 11. CONFIGURACIÓN =================
 // Cada cambio se guarda al momento (no hay botón "Guardar").
 // Para un ajuste nuevo: añádelo a CONFIG_INICIAL (sección 1), úsalo donde haga falta
 // y añade aquí su control.
@@ -756,10 +822,15 @@ function verConfiguracion() {
   const extraTest = `<label class="ajuste"><span>Mostrar primero solo la pregunta (las respuestas aparecen al pulsar un botón)</span>
     <input type="checkbox" id="test-ocultar" ${config.test.ocultarRespuestas ? "checked" : ""}></label>`;
 
+  // Ajuste solo de los dibujos: cuántas preguntas tiene cada ronda
+  const extraDibujos = `<label class="ajuste"><span>Número de preguntas por ronda</span>
+    <input type="number" id="dibujos-cantidad" min="1" max="50" value="${config.dibujos.cantidad}"></label>`;
+
   app.innerHTML = `
     <h2>Configuración</h2>
     ${bloque("test", "Test", "pregunta", "preguntas", extraTest)}
     ${bloque("dictado", "Dictado", "palabra", "palabras")}
+    ${bloque("dibujos", "Dibujos", "pregunta", "preguntas", extraDibujos)}
     <fieldset>
       <legend>Tarjetas</legend>
       <label class="ajuste"><span>Leer la palabra en voz alta al aparecer cada tarjeta</span>
@@ -808,6 +879,14 @@ function verConfiguracion() {
     $("#msg").textContent = "Guardado ✓";
   };
   conectar("dictado");
+  conectar("dibujos");
+  $("#dibujos-cantidad").onchange = (e) => {
+    const n = parseInt(e.target.value, 10);
+    config.dibujos.cantidad = Number.isNaN(n) ? config.dibujos.cantidad : Math.min(50, Math.max(1, n)); // se limita a 1-50
+    e.target.value = config.dibujos.cantidad;
+    guardarConfig();
+    $("#msg").textContent = "Guardado ✓";
+  };
   $("#aleatorio-cantidad").onchange = (e) => {
     const n = parseInt(e.target.value, 10);
     // Se limita a 1-100; si no es un número válido, se conserva el valor anterior
@@ -834,7 +913,7 @@ function verConfiguracion() {
   };
 }
 
-// ================= 11. ARRANQUE, USUARIOS (FIREBASE) Y MENÚ =================
+// ================= 12. ARRANQUE, USUARIOS (FIREBASE) Y MENÚ =================
 // Firebase Authentication gestiona el usuario y la contraseña, y Firestore guarda el progreso
 // en un documento por usuario: usuarios/{uid}. Los usuarios se crean a mano en la consola de Firebase.
 // Los datos de conexión están en firebase-config.js.
@@ -1018,7 +1097,8 @@ const secciones = { test: verTest, tarjetas: verTarjetas, unir: () => { nuevaSes
   huecos: () => { nuevaSesion("huecos"); verHuecos(0); },
   ordenar: () => { nuevaSesion("ordenar"); verOrdenar(0); },
   // Cada vez que se abre la pestaña se generan frases nuevas (generador.js)
-  ordenarAleatorio: () => abrirOrdenarAleatorio(), dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
+  ordenarAleatorio: () => abrirOrdenarAleatorio(),
+  dibujos: () => verDibujos(), dictado: () => verDictado(), canciones: () => verCanciones(0), configuracion: verConfiguracion };
 
 document.querySelectorAll("nav button").forEach((b) => {
   b.onclick = () => {

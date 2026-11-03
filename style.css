@@ -183,6 +183,10 @@ body.sin-sesion nav { display: none; } /* sin sesión no se ve el menú */
 }
 .login .secundario { background: transparent; color: var(--tinta); }
 
+/* Dibujos: el SVG ocupa todo el ancho disponible */
+.dibujo { margin: 8px 0 4px; }
+.dibujo svg { display: block; width: 100%; height: auto; border: 1px solid var(--borde); border-radius: 8px; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
 /* Hace que el atributo hidden oculte siempre el elemento, aunque tenga display propio (grid, flex...) */

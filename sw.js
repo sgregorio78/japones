@@ -5,8 +5,8 @@
 // una copia); si no hay, se usa la última copia guardada. Así los cambios se ven en cuanto se
 // suben, sin quedarse con versiones viejas. Las llamadas a Firebase (datos y acceso) no pasan
 // por aquí: van directas a internet.
-const CACHE = "japones-v1";
-const ARCHIVOS = ["./", "index.html", "style.css", "app.js", "ejemplos.js", "canciones.js", "generador.js", "firebase-config.js"];
+const CACHE = "japones-v2";
+const ARCHIVOS = ["./", "index.html", "style.css", "app.js", "ejemplos.js", "canciones.js", "generador.js", "dibujos.js", "firebase-config.js"];
 
 self.addEventListener("install", (evento) => {
   evento.waitUntil(caches.open(CACHE).then((c) => c.addAll(ARCHIVOS)).then(() => self.skipWaiting()));
